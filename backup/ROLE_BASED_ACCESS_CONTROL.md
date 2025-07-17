@@ -23,14 +23,14 @@ For testing purposes, the following demo users are available:
 
 | Email | Password | Role | Access |
 |-------|----------|------|--------|
-| admin@example.com | password | Admin | All sections |
-| quality@example.com | password | Quality | Menu Principal + Quality |
-| logistics@example.com | password | Logistics | Menu Principal + Logistics |
-| reception@example.com | password | Reception | Menu Principal + Reception |
-| production@example.com | password | Production | Menu Principal + Production |
-| personnel@example.com | password | Personnel | Menu Principal + Personnel |
-| comptabilite@example.com | password | Comptabilité | Menu Principal + Comptabilité |
-| maintenance@example.com | password | Maintenance | Menu Principal + Maintenance |
+| admin@example.com | Demo@2024! | Admin | All sections |
+| quality@example.com | Demo@2024! | Quality | Menu Principal + Quality |
+| logistics@example.com | Demo@2024! | Logistics | Menu Principal + Logistics |
+| reception@example.com | Demo@2024! | Reception | Menu Principal + Reception |
+| production@example.com | Demo@2024! | Production | Menu Principal + Production |
+| personnel@example.com | Demo@2024! | Personnel | Menu Principal + Personnel |
+| comptabilite@example.com | Demo@2024! | Comptabilité | Menu Principal + Comptabilité |
+| maintenance@example.com | Demo@2024! | Maintenance | Menu Principal + Maintenance |
 
 ## How It Works
 

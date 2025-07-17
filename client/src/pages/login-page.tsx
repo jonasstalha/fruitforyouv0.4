@@ -44,9 +44,17 @@ export function LoginPage() {
     }
   };
 
-  const handleDemoUserSelect = (userEmail: string) => {
+  const handleDemoUserSelect = async (userEmail: string) => {
     setEmail(userEmail);
-    setPassword("password");
+    setPassword("Demo@2024!");
+    
+    // Auto-submit the form for demo users
+    try {
+      await signIn(userEmail, "Demo@2024!");
+      setLocation("/");
+    } catch (error) {
+      console.error("Demo user login failed:", error);
+    }
   };
 
   return (
@@ -111,7 +119,7 @@ export function LoginPage() {
 
         {/* Demo Users Section */}
         <div className="mt-8 border-t border-gray-200 pt-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Demo Users (Password: password)</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Demo Users (Password: Demo@2024!)</h3>
           <div className="space-y-2">
             {demoUsers.map((user, index) => (
               <button

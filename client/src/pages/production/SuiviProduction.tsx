@@ -299,119 +299,325 @@ const SuiviProduction = () => {
       
       // Import jsPDF dynamically
       const jsPDF = (await import('jspdf')).default;
-      const doc = new jsPDF();
+      const doc = new jsPDF('p', 'mm', 'a4');
       
-      // Header
-      doc.setFontSize(20);
-      doc.text('Suivi de la production', 105, 20, { align: 'center' });
+      // Page dimensions and margins
+      const pageWidth = 210;
+      const pageHeight = 297;
+      const margin = 8;
+      const contentWidth = pageWidth - (margin * 2);
       
-      doc.setFontSize(16);
-      doc.text('AVOCAT', 105, 30, { align: 'center' });
+      // Enhanced layout proportions with better spacing
+      const headerHeight = 70;  // Enhanced header space
+      const tableHeight = 150;  // Optimized table height
+      const footerHeight = 60;  // Enhanced footer space
       
-      doc.setFontSize(12);
-      doc.text('SMQ.ENR 23', 20, 45);
-      doc.text('Version : 01', 20, 52);
-      doc.text('Date : 19/05/2023', 20, 59);
-      doc.text(`Lot: ${currentLot?.lotNumber || ''}`, 150, 45);
+      // Professional color palette
+      const colors = {
+        primary: [46, 125, 50],      // Professional Green
+        secondary: [129, 199, 132],   // Light Green
+        accent: [27, 94, 32],        // Dark Green
+        text: [33, 33, 33],          // Dark Gray
+        lightText: [97, 97, 97],     // Medium Gray
+        background: [248, 249, 250], // Light Background
+        white: [255, 255, 255],      // White
+        border: [224, 224, 224],     // Light Border
+        headerBg: [200, 230, 201],   // Header Background
+        tableBg: [232, 245, 233]     // Table Background
+      };
       
-      // Form data
-      doc.text(`DATE : ${currentData.headerData.date}`, 20, 75);
-      doc.text(`PRODUIT : ${currentData.headerData.produit}`, 20, 82);
-      doc.text(`N° LOT CLIENT : ${currentData.headerData.numeroLotClient}`, 20, 89);
-      
-      // Production type
-      doc.text('Type de production:', 20, 103);
-      if (currentData.headerData.typeProduction === 'CONVENTIONNEL') {
-        doc.text('☑ CONVENTIONNEL', 20, 110);
-        doc.text('☐ BIOLOGIQUE', 80, 110);
-      } else {
-        doc.text('☐ CONVENTIONNEL', 20, 110);
-        doc.text('☑ BIOLOGIQUE', 80, 110);
-      }
-      
-      // Calibre section
-      doc.text('Calibres:', 20, 125);
-      let yPos = 132;
-      const calibres = Object.keys(currentData.calibreData);
-      for (let i = 0; i < calibres.length; i += 6) {
-        let xPos = 20;
-        for (let j = i; j < Math.min(i + 6, calibres.length); j++) {
-          const calibre = calibres[j];
-          doc.text(`${calibre}: ${currentData.calibreData[calibre]}`, xPos, yPos);
-          xPos += 30;
+      // Enhanced helper functions
+      const drawRect = (x: number, y: number, w: number, h: number, fillColor?: number[], strokeColor?: number[], strokeWidth: number = 0.5) => {
+        doc.setLineWidth(strokeWidth);
+        if (fillColor) {
+          doc.setFillColor(fillColor[0], fillColor[1], fillColor[2]);
         }
-        yPos += 7;
+        if (strokeColor) {
+          doc.setDrawColor(strokeColor[0], strokeColor[1], strokeColor[2]);
+        }
+        doc.rect(x, y, w, h, fillColor ? 'FD' : 'S');
+      };
+      
+      const drawText = (text: string, x: number, y: number, fontSize: number, color: number[] = colors.text, align: 'left' | 'center' | 'right' = 'left', fontStyle: 'normal' | 'bold' = 'normal') => {
+        doc.setFontSize(fontSize);
+        doc.setTextColor(color[0], color[1], color[2]);
+        if (fontStyle === 'bold') {
+          doc.setFont('helvetica', 'bold');
+        } else {
+          doc.setFont('helvetica', 'normal');
+        }
+        doc.text(text, x, y, { align });
+      };
+      
+      const drawBorder = (x: number, y: number, w: number, h: number, color: number[] = colors.border) => {
+        doc.setDrawColor(color[0], color[1], color[2]);
+        doc.setLineWidth(0.5);
+        doc.rect(x, y, w, h, 'S');
+      };
+      
+      // === ENHANCED HEADER SECTION ===
+      let yPos = margin;
+      
+      // Main header with gradient effect simulation
+      drawRect(margin, yPos, contentWidth, 35, colors.headerBg, colors.primary, 1);
+      
+      // Logo area with enhanced styling
+      drawRect(margin + 5, yPos + 5, 25, 25, colors.white, colors.primary, 1);
+      drawText('FRUITS', margin + 17.5, yPos + 15, 9, colors.primary, 'center', 'bold');
+      drawText('FOR YOU', margin + 17.5, yPos + 22, 8, colors.primary, 'center', 'bold');
+      
+      // Main title with enhanced typography
+      drawText('Suivi de la production', pageWidth / 2, yPos + 18, 18, colors.text, 'center', 'bold');
+      drawText('AVOCAT', pageWidth / 2, yPos + 28, 16, colors.accent, 'center', 'bold');
+      
+      // Document info with better positioning
+      const infoX = margin + contentWidth - 50;
+      drawRect(infoX - 5, yPos + 3, 48, 29, colors.white, colors.border, 0.5);
+      drawText('SMQ.ENR 23', infoX, yPos + 10, 9, colors.text, 'left', 'bold');
+      drawText('Version : 01', infoX, yPos + 16, 8, colors.lightText);
+      drawText('Date : 19/05/2023', infoX, yPos + 22, 8, colors.lightText);
+      drawText(`Lot: ${currentLot?.lotNumber || 'N/A'}`, infoX, yPos + 28, 8, colors.primary, 'left', 'bold');
+      
+      yPos += 42;
+      
+      // Form information with enhanced layout
+      drawRect(margin, yPos, contentWidth, 22, colors.background, colors.border, 0.5);
+      
+      // Three-column layout with better spacing
+      const col1X = margin + 5;
+      const col2X = margin + 68;
+      const col3X = margin + 136;
+      
+      // Column 1 - Basic Info
+      drawText('DATE :', col1X, yPos + 8, 10, colors.text, 'left', 'bold');
+      drawText(currentData.headerData.date || 'N/A', col1X, yPos + 15, 10, colors.primary);
+      
+      // Column 2 - Product Info
+      drawText('PRODUIT :', col2X, yPos + 8, 10, colors.text, 'left', 'bold');
+      drawText(currentData.headerData.produit || 'N/A', col2X, yPos + 15, 10, colors.primary);
+      
+      // Column 3 - Lot Info
+      drawText('N° LOT CLIENT :', col3X, yPos + 8, 10, colors.text, 'left', 'bold');
+      drawText(currentData.headerData.numeroLotClient || 'N/A', col3X, yPos + 15, 10, colors.primary);
+      
+      // Production type with enhanced checkboxes
+      const checkboxY = yPos + 8;
+      drawText('☐', col1X, checkboxY + 12, 12, colors.primary);
+      drawText('CONVENTIONNEL', col1X + 8, checkboxY + 12, 9, colors.text);
+      drawText('☐', col2X, checkboxY + 12, 12, colors.primary);
+      drawText('BIOLOGIQUE', col2X + 8, checkboxY + 12, 9, colors.text);
+      
+      const isConventionnel = currentData.headerData.typeProduction === 'CONVENTIONNEL';
+      if (isConventionnel) {
+        drawText('☑', col1X, checkboxY + 12, 12, colors.primary);
+      } else {
+        drawText('☑', col2X, checkboxY + 12, 12, colors.primary);
       }
       
-      doc.text(`Nombre des palettes: ${currentData.nombrePalettes}`, 20, yPos + 7);
+      // === ENHANCED MAIN TABLE SECTION ===
+      yPos += 30;
       
-      // Production table
-      yPos += 20;
-      doc.setFontSize(10);
+      // Table headers with enhanced styling
+      const headers = ['N° P', 'La date', 'Heure', 'Calibre', 'Poids brut (Kg)', 'Poids net (Kg)', 'N° de lot Interne', 'Variété', 'Nbr De C/P', 'Chambre froide (DISTIN)', 'DÉCISION'];
+      const colWidths = [14, 18, 14, 16, 20, 18, 24, 16, 16, 26, 20];
       
-      // Table headers
-      const headers = ['N°', 'Date', 'Heure', 'Calibre', 'Poids brut (Kg)', 'Poids net (Kg)', 'N° lot Interne', 'Variété', 'Nbr C/P', 'Chambre froide', 'Décision'];
-      const colWidths = [15, 20, 15, 15, 25, 25, 25, 20, 15, 25, 20];
-      let xStart = 10;
+      // Enhanced table header
+      drawRect(margin, yPos, contentWidth, 12, colors.tableBg, colors.primary, 1);
       
+      let xStart = margin;
       headers.forEach((header, index) => {
-        doc.text(header, xStart, yPos);
+        // Draw column separators
+        if (index > 0) {
+          doc.setDrawColor(colors.border[0], colors.border[1], colors.border[2]);
+          doc.setLineWidth(0.5);
+          doc.line(xStart, yPos, xStart, yPos + 12);
+        }
+        
+        // Center text in column
+        const textX = xStart + (colWidths[index] / 2);
+        drawText(header, textX, yPos + 7, 8, colors.text, 'center', 'bold');
         xStart += colWidths[index];
       });
       
-      yPos += 5;
+      // Right border for header
+      doc.line(margin + contentWidth, yPos, margin + contentWidth, yPos + 12);
       
-      // Table data
-      currentData.productionRows.forEach((row, index) => {
-        if (yPos > 280) {
-          doc.addPage();
-          yPos = 20;
+      yPos += 12;
+      
+      // Enhanced table rows (26 rows)
+      const rowHeight = (tableHeight - 20) / 26; // Optimized row height
+      
+      for (let i = 0; i < 26; i++) {
+        const rowY = yPos + (i * rowHeight);
+        const row = currentData.productionRows[i];
+        
+        // Enhanced alternating row colors
+        if (i % 2 === 0) {
+          drawRect(margin, rowY, contentWidth, rowHeight, colors.background);
+        } else {
+          drawRect(margin, rowY, contentWidth, rowHeight, colors.white);
         }
         
-        xStart = 10;
+        // Row data with better formatting
+        xStart = margin;
         const rowData = [
-          row.numero.toString(),
-          row.date,
-          row.heure,
-          row.calibre,
-          row.poidsBrut,
-          row.poidsNet,
-          row.numeroLotInterne,
-          row.variete,
-          row.nbrCP,
-          row.chambreFroide,
-          row.decision
+          (i + 1).toString(),
+          row?.date || '',
+          row?.heure || '',
+          row?.calibre || '',
+          row?.poidsBrut || '',
+          row?.poidsNet || '',
+          row?.numeroLotInterne || '',
+          row?.variete || '',
+          row?.nbrCP || '',
+          row?.chambreFroide || '',
+          row?.decision || ''
         ];
         
         rowData.forEach((data, colIndex) => {
-          doc.text(data || '', xStart, yPos);
+          // Draw column separators
+          if (colIndex > 0) {
+            doc.setDrawColor(colors.border[0], colors.border[1], colors.border[2]);
+            doc.setLineWidth(0.3);
+            doc.line(xStart, rowY, xStart, rowY + rowHeight);
+          }
+          
+          // Center text in column with proper spacing
+          const textX = xStart + (colWidths[colIndex] / 2);
+          const textY = rowY + (rowHeight / 2) + 1.5;
+          
+          // Special formatting for decision column
+          if (colIndex === 10 && data) {
+            const decisionColor = data === 'ACCEPTÉ' ? colors.primary : 
+                                data === 'REFUSÉ' ? [211, 47, 47] : colors.text;
+            drawText(data, textX, textY, 7, decisionColor, 'center', 'bold');
+          } else {
+            drawText(data, textX, textY, 7, colors.text, 'center');
+          }
+          
           xStart += colWidths[colIndex];
         });
         
-        yPos += 5;
+        // Right border for row
+        doc.line(margin + contentWidth, rowY, margin + contentWidth, rowY + rowHeight);
+        
+        // Bottom border for row
+        doc.setDrawColor(colors.border[0], colors.border[1], colors.border[2]);
+        doc.setLineWidth(0.3);
+        doc.line(margin, rowY + rowHeight, margin + contentWidth, rowY + rowHeight);
+      }
+      
+      // Enhanced TOTAL row
+      const totalY = yPos + (26 * rowHeight);
+      drawRect(margin, totalY, contentWidth, rowHeight + 2, colors.tableBg, colors.primary, 1);
+      
+      const totals = calculateTotals();
+      
+      // Total labels and values with better positioning
+      xStart = margin;
+      const totalData = [
+        'TOTAL',
+        '',
+        '',
+        '',
+        `${totals.poidsBrut.toFixed(2)}`,
+        `${totals.poidsNet.toFixed(2)}`,
+        '',
+        '',
+        `${totals.nbrCP}`,
+        '',
+        ''
+      ];
+      
+      totalData.forEach((data, colIndex) => {
+        if (colIndex > 0) {
+          doc.setDrawColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+          doc.setLineWidth(0.5);
+          doc.line(xStart, totalY, xStart, totalY + rowHeight + 2);
+        }
+        
+        if (data) {
+          const textX = xStart + (colWidths[colIndex] / 2);
+          const textY = totalY + (rowHeight / 2) + 2;
+          drawText(data, textX, textY, 9, colors.text, 'center', 'bold');
+        }
+        
+        xStart += colWidths[colIndex];
       });
       
-      // Totals
-      yPos += 10;
-      const totals = calculateTotals();
-      doc.setFontSize(12);
-      doc.text(`TOTAL POIDS BRUT: ${totals.poidsBrut.toFixed(2)} Kg`, 20, yPos);
-      doc.text(`POIDS NET: ${totals.poidsNet.toFixed(2)} Kg`, 80, yPos);
-      doc.text(`NBR DE C/P: ${totals.nbrCP}`, 140, yPos);
+      // Right border for total
+      doc.line(margin + contentWidth, totalY, margin + contentWidth, totalY + rowHeight + 2);
       
-      // Signatures
-      yPos += 20;
-      doc.text('Visa contrôleur de Qualité :', 20, yPos);
-      doc.text('VISA Responsable Qualité :', 80, yPos);
-      doc.text('Visa Directeur opérationnel :', 140, yPos);
+      // === ENHANCED FOOTER SECTION ===
+      yPos = headerHeight + tableHeight + 15;
       
-      yPos += 20;
-      doc.text(currentData.visas.controleurQualite || '_________________', 20, yPos);
-      doc.text(currentData.visas.responsableQualite || '_________________', 80, yPos);
-      doc.text(currentData.visas.directeurOperationnel || '_________________', 140, yPos);
+      // Enhanced calibre table
+      drawRect(margin, yPos, contentWidth, 22, colors.background, colors.border, 0.5);
       
-      // Save PDF
-      const fileName = `Suivi_Production_${currentLot?.lotNumber || 'Lot'}_${format(new Date(), 'yyyyMMdd')}.pdf`;
+      drawText('Calibre', margin + 5, yPos + 8, 10, colors.text, 'left', 'bold');
+      drawText('Nombre des palettes', margin + 5, yPos + 16, 10, colors.text, 'left', 'bold');
+      
+      const calibres = ['12', '14', '16', '18', '20', '22', '24', '26', '28', '30', '32'];
+      const calibreWidth = 16;
+      let calibreX = margin + 45;
+      
+      // Enhanced calibre grid
+      calibres.forEach((calibre, index) => {
+        // Calibre number cell
+        drawRect(calibreX, yPos + 2, calibreWidth, 8, colors.white, colors.border, 0.5);
+        drawText(calibre, calibreX + (calibreWidth / 2), yPos + 7, 8, colors.text, 'center', 'bold');
+        
+        // Calibre value cell
+        drawRect(calibreX, yPos + 10, calibreWidth, 8, colors.white, colors.border, 0.5);
+        const calibreValue = currentData.calibreData[calibre] || 0;
+        drawText(calibreValue.toString(), calibreX + (calibreWidth / 2), yPos + 15, 8, colors.primary, 'center', 'bold');
+        
+        calibreX += calibreWidth;
+      });
+      
+      // Enhanced signatures section
+      yPos += 30;
+      
+      const sigWidth = 62;
+      const sigHeight = 22;
+      const sigSpacing = 5;
+      
+      // Signature boxes with enhanced styling
+      const signatures = [
+        { label: 'Visa contrôleur de Qualité :', value: currentData.visas.controleurQualite || '' },
+        { label: 'VISA Responsable Qualité :', value: currentData.visas.responsableQualite || '' },
+        { label: 'Visa Directeur opérationnel :', value: currentData.visas.directeurOperationnel || '' }
+      ];
+      
+      signatures.forEach((sig, index) => {
+        const sigX = margin + (index * (sigWidth + sigSpacing));
+        
+        // Signature box with shadow effect
+        drawRect(sigX + 1, yPos + 1, sigWidth, sigHeight, [240, 240, 240]); // Shadow
+        drawRect(sigX, yPos, sigWidth, sigHeight, colors.white, colors.border, 0.8);
+        
+        // Signature label
+        drawText(sig.label, sigX + 2, yPos + 6, 8, colors.text, 'left', 'bold');
+        
+        // Signature value or line
+        if (sig.value) {
+          drawText(sig.value, sigX + 2, yPos + 16, 9, colors.primary, 'left', 'bold');
+        } else {
+          // Draw signature line
+          doc.setDrawColor(colors.border[0], colors.border[1], colors.border[2]);
+          doc.setLineWidth(0.5);
+          doc.line(sigX + 2, yPos + 16, sigX + sigWidth - 2, yPos + 16);
+        }
+      });
+      
+      // Enhanced footer with generation info
+      yPos += 30;
+      drawRect(margin, yPos, contentWidth, 8, colors.background, colors.border, 0.3);
+      const footerText = `Généré le ${format(new Date(), 'dd/MM/yyyy à HH:mm')} - Système de Gestion Qualité FRUITS FOR YOU`;
+      drawText(footerText, pageWidth / 2, yPos + 5, 8, colors.lightText, 'center');
+      
+      // Save PDF with enhanced filename
+      const fileName = `Suivi_Production_${currentLot?.lotNumber?.replace(/\s+/g, '_') || 'Lot'}_${format(new Date(), 'yyyyMMdd_HHmm')}.pdf`;
       doc.save(fileName);
       
       setShowSuccessMessage(true);

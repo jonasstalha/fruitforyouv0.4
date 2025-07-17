@@ -16,8 +16,11 @@ import {
   RotateCcw,
   Check,
   AlertTriangle,
-  Archive
+  Archive,
+  Loader2
 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 const ARCHIVE_STORAGE_KEY = 'archived_reports';
 
@@ -53,11 +56,379 @@ const Archivagedescontroles = () => {
   const [editingReport, setEditingReport] = useState<ArchivedReport | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [generatingPdf, setGeneratingPdf] = useState<string | null>(null);
+
+  // Function to convert File to base64
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Function to generate comprehensive PDF report
+  const generateCompletePdfReport = async (report: ArchivedReport) => {
+    setGeneratingPdf(report.id);
+    try {
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const pageWidth = doc.internal.pageSize.width;
+      const pageHeight = doc.internal.pageSize.height;
+      let yPosition = 20;
+
+      // Title
+      doc.setFontSize(20);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Complete Quality Control Report', pageWidth / 2, yPosition, { align: 'center' });
+      yPosition += 15;
+
+      // Report Information
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Lot ID: ${report.lotId}`, 20, yPosition);
+      yPosition += 7;
+      doc.text(`Date: ${report.date}`, 20, yPosition);
+      yPosition += 7;
+      doc.text(`Controller: ${report.controller}`, 20, yPosition);
+      yPosition += 7;
+      doc.text(`Chief: ${report.chief}`, 20, yPosition);
+      yPosition += 7;
+      doc.text(`Calibres: ${report.calibres.join(', ')}`, 20, yPosition);
+      yPosition += 7;
+      doc.text(`Status: ${report.status}`, 20, yPosition);
+      yPosition += 7;
+      doc.text(`Submitted: ${new Date(report.submittedAt).toLocaleDateString()}`, 20, yPosition);
+      yPosition += 15;
+
+      // Line separator
+      doc.setLineWidth(0.5);
+      doc.line(20, yPosition, pageWidth - 20, yPosition);
+      yPosition += 10;
+
+      // Process each calibre
+      if (report.images && report.testResults) {
+        for (const calibre of report.calibres) {
+          const calibreImages = report.images[calibre] || [];
+          const calibreResults = report.testResults[calibre] || {};
+
+          // Check if we need a new page
+          if (yPosition > pageHeight - 80) {
+            doc.addPage();
+            yPosition = 20;
+          }
+
+          // Calibre title
+          doc.setFontSize(16);
+          doc.setFont('helvetica', 'bold');
+          doc.text(`Calibre ${calibre}`, 20, yPosition);
+          yPosition += 12;
+
+          // Test Results Section
+          doc.setFontSize(12);
+          doc.setFont('helvetica', 'bold');
+          doc.text('Test Results:', 20, yPosition);
+          yPosition += 8;
+          
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(10);
+          
+          // Display test values
+          if (calibreResults.poids) {
+            doc.text(`Weight: ${calibreResults.poids}g`, 25, yPosition);
+            yPosition += 6;
+          }
+          if (calibreResults.firmness) {
+            doc.text(`Firmness: ${calibreResults.firmness} kg/cm²`, 25, yPosition);
+            yPosition += 6;
+          }
+          yPosition += 8;
+
+          // Unit Images Section
+          if (calibreImages.length > 0) {
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'bold');
+            doc.text(`Unit Images (${calibreImages.length}/12):`, 20, yPosition);
+            yPosition += 10;
+
+            // Display images in a grid (4 images per row)
+            const imageSize = 35;
+            const imagesPerRow = 4;
+            const imageSpacing = 3;
+            const startX = 20;
+            let currentRow = 0;
+            let currentCol = 0;
+
+            for (let i = 0; i < Math.min(calibreImages.length, 12); i++) {
+              const image = calibreImages[i];
+              
+              // Check if we need a new page
+              const imageY = yPosition + currentRow * (imageSize + imageSpacing);
+              if (imageY + imageSize > pageHeight - 20) {
+                doc.addPage();
+                yPosition = 20;
+                currentRow = 0;
+                currentCol = 0;
+              }
+
+              try {
+                let base64 = '';
+                if (image instanceof File) {
+                  base64 = await fileToBase64(image);
+                } else if (typeof image === 'string' && image.startsWith('data:')) {
+                  base64 = image;
+                } else {
+                  console.warn('Skipping invalid image format:', image);
+                  continue;
+                }
+
+                const x = startX + currentCol * (imageSize + imageSpacing);
+                const y = yPosition + currentRow * (imageSize + imageSpacing);
+
+                // Add image
+                doc.addImage(base64, 'JPEG', x, y, imageSize, imageSize);
+                
+                // Add image number
+                doc.setFontSize(8);
+                doc.setFont('helvetica', 'bold');
+                doc.text(`${i + 1}`, x + 2, y + 8);
+                
+                currentCol++;
+                if (currentCol >= imagesPerRow) {
+                  currentCol = 0;
+                  currentRow++;
+                }
+              } catch (error) {
+                console.error('Error processing unit image:', error);
+                // Continue with next image
+              }
+            }
+
+            // Update yPosition after images
+            const totalRows = Math.ceil(Math.min(calibreImages.length, 12) / imagesPerRow);
+            yPosition += totalRows * (imageSize + imageSpacing) + 15;
+          }
+
+          // Test Result Images Section
+          if (calibreResults.poids_image || calibreResults.firmness_image || calibreResults.puree_image) {
+            // Check if we need a new page
+            if (yPosition > pageHeight - 80) {
+              doc.addPage();
+              yPosition = 20;
+            }
+
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'bold');
+            doc.text('Test Result Images:', 20, yPosition);
+            yPosition += 10;
+
+            let testImageX = 20;
+            const testImageSize = 45;
+            const testImageSpacing = 10;
+
+            // Weight test image
+            if (calibreResults.poids_image) {
+              try {
+                let base64 = '';
+                if (calibreResults.poids_image instanceof File) {
+                  base64 = await fileToBase64(calibreResults.poids_image);
+                } else if (typeof calibreResults.poids_image === 'string' && calibreResults.poids_image.startsWith('data:')) {
+                  base64 = calibreResults.poids_image;
+                }
+
+                if (base64) {
+                  doc.addImage(base64, 'JPEG', testImageX, yPosition, testImageSize, testImageSize);
+                  doc.setFontSize(10);
+                  doc.setFont('helvetica', 'normal');
+                  doc.text('Weight Test', testImageX + 2, yPosition + testImageSize + 5);
+                  testImageX += testImageSize + testImageSpacing;
+                }
+              } catch (error) {
+                console.error('Error processing weight test image:', error);
+              }
+            }
+
+            // Firmness test image
+            if (calibreResults.firmness_image) {
+              try {
+                let base64 = '';
+                if (calibreResults.firmness_image instanceof File) {
+                  base64 = await fileToBase64(calibreResults.firmness_image);
+                } else if (typeof calibreResults.firmness_image === 'string' && calibreResults.firmness_image.startsWith('data:')) {
+                  base64 = calibreResults.firmness_image;
+                }
+
+                if (base64) {
+                  doc.addImage(base64, 'JPEG', testImageX, yPosition, testImageSize, testImageSize);
+                  doc.setFontSize(10);
+                  doc.setFont('helvetica', 'normal');
+                  doc.text('Firmness Test', testImageX + 2, yPosition + testImageSize + 5);
+                  testImageX += testImageSize + testImageSpacing;
+                }
+              } catch (error) {
+                console.error('Error processing firmness test image:', error);
+              }
+            }
+
+            // Puree test image
+            if (calibreResults.puree_image) {
+              try {
+                let base64 = '';
+                if (calibreResults.puree_image instanceof File) {
+                  base64 = await fileToBase64(calibreResults.puree_image);
+                } else if (typeof calibreResults.puree_image === 'string' && calibreResults.puree_image.startsWith('data:')) {
+                  base64 = calibreResults.puree_image;
+                }
+
+                if (base64) {
+                  doc.addImage(base64, 'JPEG', testImageX, yPosition, testImageSize, testImageSize);
+                  doc.setFontSize(10);
+                  doc.setFont('helvetica', 'normal');
+                  doc.text('Puree Test', testImageX + 2, yPosition + testImageSize + 5);
+                }
+              } catch (error) {
+                console.error('Error processing puree test image:', error);
+              }
+            }
+
+            yPosition += testImageSize + 20;
+          }
+
+          // Add spacing between calibres
+          yPosition += 15;
+        }
+      }
+
+      // Summary section
+      if (yPosition > pageHeight - 60) {
+        doc.addPage();
+        yPosition = 20;
+      }
+      
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Report Summary:', 20, yPosition);
+      yPosition += 10;
+      
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      const totalImages = Object.values(report.images || {}).reduce((sum, imgs) => sum + (imgs?.length || 0), 0);
+      doc.text(`Total Images: ${totalImages}`, 20, yPosition);
+      yPosition += 5;
+      doc.text(`Calibres Tested: ${report.calibres.length}`, 20, yPosition);
+      yPosition += 5;
+      doc.text(`Quality Status: ${report.status}`, 20, yPosition);
+      
+      // Footer on all pages
+      const totalPages = doc.internal.pages.length - 1;
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`Page ${i} of ${totalPages}`, pageWidth - 30, pageHeight - 10);
+        doc.text(`Generated: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`, 20, pageHeight - 10);
+      }
+
+      // Save the PDF
+      const fileName = `Complete_Quality_Report_${report.lotId}_${report.date.replace(/[\/\\:*?"<>|]/g, '-')}.pdf`;
+      doc.save(fileName);
+      
+      // Success message
+      alert(`PDF report generated successfully!\nFilename: ${fileName}`);
+      
+    } catch (error) {
+      console.error('Error generating PDF report:', error);
+      alert('Error generating PDF report. Please check the console for details and try again.');
+    } finally {
+      setGeneratingPdf(null);
+    }
+  };
+
+  // Add sample data for testing (you can remove this in production)
+  const addSampleData = () => {
+    const sampleReports: ArchivedReport[] = [
+      {
+        id: 'sample-1',
+        lotId: 'LOT001',
+        date: '2025-01-15',
+        controller: 'John Doe',
+        chief: 'Jane Smith',
+        calibres: [16, 18, 20],
+        images: {
+          16: [], // In real app, this would contain File objects
+          18: [],
+          20: []
+        },
+        testResults: {
+          16: { poids: 180, firmness: 2.5 },
+          18: { poids: 200, firmness: 2.8 },
+          20: { poids: 220, firmness: 3.0 }
+        },
+        pdfController: null,
+        pdfChief: null,
+        status: 'Completed',
+        submittedAt: new Date().toISOString()
+      },
+      {
+        id: 'sample-2',
+        lotId: 'LOT002',
+        date: '2025-01-16',
+        controller: 'Alice Johnson',
+        chief: 'Bob Wilson',
+        calibres: [14, 16, 18],
+        images: {
+          14: [],
+          16: [],
+          18: []
+        },
+        testResults: {
+          14: { poids: 150, firmness: 2.2 },
+          16: { poids: 175, firmness: 2.6 },
+          18: { poids: 195, firmness: 2.9 }
+        },
+        pdfController: null,
+        pdfChief: null,
+        status: 'Completed',
+        submittedAt: new Date().toISOString()
+      }
+    ];
+
+    const existing = JSON.parse(localStorage.getItem(ARCHIVE_STORAGE_KEY) || '[]');
+    const combined = [...existing, ...sampleReports];
+    localStorage.setItem(ARCHIVE_STORAGE_KEY, JSON.stringify(combined));
+    setReports(combined);
+    alert('Sample data added! You can now test the PDF generation.');
+  };
 
   // Load archived reports from localStorage on mount
   useEffect(() => {
-    const archived = JSON.parse(localStorage.getItem(ARCHIVE_STORAGE_KEY) || '[]');
-    setReports(archived);
+    const loadArchivedReports = () => {
+      try {
+        const archived = JSON.parse(localStorage.getItem(ARCHIVE_STORAGE_KEY) || '[]');
+        console.log('Loaded archived reports:', archived);
+        setReports(archived);
+      } catch (error) {
+        console.error('Error loading archived reports:', error);
+        setReports([]);
+      }
+    };
+
+    loadArchivedReports();
+    
+    // Listen for storage changes to sync across tabs
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === ARCHIVE_STORAGE_KEY) {
+        loadArchivedReports();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
   // Apply filters and search
@@ -70,7 +441,7 @@ const Archivagedescontroles = () => {
         report.lotId.toLowerCase().includes(searchTerm.toLowerCase()) ||
         report.controller.toLowerCase().includes(searchTerm.toLowerCase()) ||
         report.chief.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        report.calibres.some(cal => cal.toLowerCase().includes(searchTerm.toLowerCase()))
+        report.calibres.some(cal => String(cal).toLowerCase().includes(searchTerm.toLowerCase()))
       );
     }
 
@@ -93,7 +464,7 @@ const Archivagedescontroles = () => {
     }
     if (filters.calibre) {
       filtered = filtered.filter(report => 
-        report.calibres.some(cal => cal.toLowerCase().includes(filters.calibre.toLowerCase()))
+        report.calibres.some(cal => String(cal).toLowerCase().includes(filters.calibre.toLowerCase()))
       );
     }
     if (filters.status) {
@@ -110,20 +481,33 @@ const Archivagedescontroles = () => {
 
   // Save edited report
   const saveEdit = () => {
-    setReports((prev: ArchivedReport[]) => prev.map(report =>
-      editingReport && report.id === editingReport.id ? editingReport : report
-    ));
+    if (!editingReport) return;
+    
+    const updatedReports = reports.map(report =>
+      report.id === editingReport.id ? editingReport : report
+    );
+    
+    setReports(updatedReports);
+    localStorage.setItem(ARCHIVE_STORAGE_KEY, JSON.stringify(updatedReports));
     setEditingReport(null);
+    alert('Report updated successfully!');
   };
 
   // Handle delete
   const handleDelete = (reportId: string) => {
-    setReports((prev: ArchivedReport[]) => prev.filter(report => report.id !== reportId));
+    const updatedReports = reports.filter(report => report.id !== reportId);
+    setReports(updatedReports);
+    localStorage.setItem(ARCHIVE_STORAGE_KEY, JSON.stringify(updatedReports));
     setDeleteConfirm(null);
+    alert('Report deleted successfully!');
   };
 
   // Handle PDF download/view
-  const handlePdfAction = (pdfName: string, action: string) => {
+  const handlePdfAction = (pdfName: string | null | undefined, action: string) => {
+    if (!pdfName) {
+      alert('PDF not available');
+      return;
+    }
     // In real app, this would download/view the actual PDF
     console.log(`${action} PDF: ${pdfName}`);
     alert(`${action}: ${pdfName}`);
@@ -440,6 +824,18 @@ const Archivagedescontroles = () => {
                           <Edit className="w-4 h-4" />
                         </button>
                         <button
+                          onClick={() => generateCompletePdfReport(report)}
+                          disabled={generatingPdf === report.id}
+                          className="text-green-600 hover:text-green-800 flex items-center gap-1"
+                          title="Download Complete PDF Report"
+                        >
+                          {generatingPdf === report.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Download className="w-4 h-4" />
+                          )}
+                        </button>
+                        <button
                           onClick={() => setDeleteConfirm(report.id)}
                           className="text-red-600 hover:text-red-800 flex items-center gap-1"
                           title="Delete"
@@ -474,7 +870,7 @@ const Archivagedescontroles = () => {
                   <input
                     type="text"
                     value={editingReport.lotId}
-                    onChange={(e) => setEditingReport(prev => ({...prev, lotId: e.target.value}))}
+                    onChange={(e) => setEditingReport(prev => prev ? {...prev, lotId: e.target.value} : prev)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -483,7 +879,7 @@ const Archivagedescontroles = () => {
                   <input
                     type="text"
                     value={editingReport.controller}
-                    onChange={(e) => setEditingReport(prev => ({...prev, controller: e.target.value}))}
+                    onChange={(e) => setEditingReport(prev => prev ? {...prev, controller: e.target.value} : prev)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -492,7 +888,7 @@ const Archivagedescontroles = () => {
                   <input
                     type="text"
                     value={editingReport.chief}
-                    onChange={(e) => setEditingReport(prev => ({...prev, chief: e.target.value}))}
+                    onChange={(e) => setEditingReport(prev => prev ? {...prev, chief: e.target.value} : prev)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -500,7 +896,7 @@ const Archivagedescontroles = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                   <select
                     value={editingReport.status}
-                    onChange={(e) => setEditingReport(prev => ({...prev, status: e.target.value}))}
+                    onChange={(e) => setEditingReport(prev => prev ? {...prev, status: e.target.value} : prev)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="Completed">Completed</option>

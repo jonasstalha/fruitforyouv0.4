@@ -13,27 +13,32 @@ service firebase.storage {
     // Helper function to check if user has quality control permissions
     function isQualityControlUser() {
       return isAuthenticated() && 
-             request.auth.token.email != null;
+             request.auth.token.email != null &&
+             request.auth.token.email_verified == true;
     }
     
     // Helper function to check if user has admin role
     function isAdmin() {
-      return isAuthenticated();
+      return isAuthenticated() && 
+             request.auth.token.role == 'admin';
     }
     
     // Helper function to check if user has controller or higher role
     function isControllerOrHigher() {
-      return isAuthenticated();
+      return isAuthenticated() && 
+             request.auth.token.role in ['controller', 'chief', 'quality_manager', 'admin'];
     }
     
     // Helper function to check if user has chief or higher role
     function isChiefOrHigher() {
-      return isAuthenticated();
+      return isAuthenticated() && 
+             request.auth.token.role in ['chief', 'quality_manager', 'admin'];
     }
     
     // Helper function to check if user has quality manager or admin role
     function isQualityManagerOrAdmin() {
-      return isAuthenticated();
+      return isAuthenticated() && 
+             request.auth.token.role in ['quality_manager', 'admin'];
     }
     
     // Helper function to validate image file types
@@ -99,8 +104,8 @@ service firebase.storage {
                       canAccessLot() &&
                       isValidImageType() &&
                       isValidImageSize() &&
-                      // Allow numeric calibres OR "NA" for cleaned N/A calibres
-                      (calibre.matches('[0-9]+') || calibre.matches('[a-zA-Z0-9]+')) &&
+                      // Validate calibre format (numeric values)
+                      calibre.matches('[0-9]+') &&
                       // Validate image naming
                       imageId.matches('.*\\.(jpg|jpeg|png|webp)');
       
@@ -118,7 +123,7 @@ service firebase.storage {
                       canAccessLot() &&
                       isValidImageType() &&
                       isValidImageSize() &&
-                      (calibre.matches('[0-9]+') || calibre.matches('[a-zA-Z0-9]+')) &&
+                      calibre.matches('[0-9]+') &&
                       // Validate test image naming (poids, firmness, puree)
                       imageId.matches('(poids|firmness|puree|test)_.*\\.(jpg|jpeg|png|webp)');
       

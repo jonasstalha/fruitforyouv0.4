@@ -295,6 +295,52 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Quality Control collections
+    match /quality_control_lots/{lotId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Validation function for quality control lot data
+    function isValidQualityControlLot() {
+      let data = request.resource.data;
+      return data.lotNumber is string
+        && data.formData is map
+        && data.formData.date is string
+        && data.formData.product is string
+        && data.formData.variety is string
+        && data.formData.campaign is string
+        && data.formData.palettes is list
+        && data.status is string
+        && (data.status in ['draft', 'completed', 'submitted', 'chief_approved', 'chief_rejected'])
+        && data.phase is string
+        && (data.phase in ['controller', 'chief'])
+        && data.createdAt != null
+        && data.updatedAt != null;
+    }
+
+    // Quality Control Lots collection with validation
+    match /quality_control_lots/{lotId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidQualityControlLot();
+      allow update: if isAuthenticated() && isValidQualityControlLot();
+      allow delete: if isAuthenticated();
+    }
+
+    // Quality Control Reports collection  
+    match /quality_reports/{reportId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Quality Rapports collection
+    match /qualityRapports/{rapportId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Quality Control Images collection
+    match /quality_control_images/{imageId} {
+      allow read, write: if isAuthenticated();
+    }
+
     // Default deny
     match /{document=**} {
       allow read, write: if false;
@@ -327,6 +373,11 @@ service firebase.storage {
     }
     // Factures: allow any authenticated user to read and write
     match /factures/{allBoxIds}/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Quality Control images
+    match /quality_control/{allPaths=**} {
       allow read, write: if request.auth != null;
     }
 

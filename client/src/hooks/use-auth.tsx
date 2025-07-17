@@ -79,17 +79,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       // Check if it's a demo user first
       const demoUsers: Record<string, { email: string; role: UserRole }> = {
-        "admin@example.com": { email, role: "admin" },
-        "quality@example.com": { email, role: "quality" },
-        "logistics@example.com": { email, role: "logistics" },
-        "reception@example.com": { email, role: "reception" },
-        "production@example.com": { email, role: "production" },
-        "personnel@example.com": { email, role: "personnel" },
-        "comptabilite@example.com": { email, role: "comptabilite" },
-        "maintenance@example.com": { email, role: "maintenance" },
+        "admin@example.com": { email: "admin@example.com", role: "admin" },
+        "quality@example.com": { email: "quality@example.com", role: "quality" },
+        "logistics@example.com": { email: "logistics@example.com", role: "logistics" },
+        "reception@example.com": { email: "reception@example.com", role: "reception" },
+        "production@example.com": { email: "production@example.com", role: "production" },
+        "personnel@example.com": { email: "personnel@example.com", role: "personnel" },
+        "comptabilite@example.com": { email: "comptabilite@example.com", role: "comptabilite" },
+        "maintenance@example.com": { email: "maintenance@example.com", role: "maintenance" },
       };
 
-      if (demoUsers[email] && password === "password") {
+      // Check if it's a demo user
+      const isDemoUser = !!demoUsers[email];
+      const passwordMatch = password === "Demo@2024!";
+      
+      console.log("Authentication attempt:", { email, isDemoUser, passwordMatch });
+      
+      if (isDemoUser && passwordMatch) {
+        console.log("Demo user login successful");
         // Create a demo user object
         const demoUser: CustomUser = {
           uid: `demo-${demoUsers[email].role}`,
@@ -116,13 +123,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      console.log("Attempting Firebase authentication");
       // If not a demo user, try Firebase authentication
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const userData = userCredential.user;
-      console.log("Login success, received user data:", userData);
+      console.log("Firebase login successful");
       toast.success("Connexion réussie");
     } catch (error) {
       console.error("Login error:", error);
+      toast.error("Erreur de connexion. Vérifiez vos identifiants.");
       toast.error("Erreur de connexion: Email ou mot de passe incorrect");
       throw error;
     }

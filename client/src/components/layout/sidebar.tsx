@@ -87,26 +87,47 @@ export default function Sidebar() {
           <ul>
             {items.map((item, index) => (
               <li key={index} className="mb-1">
-                <Link href={item.path}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div
-                        className={cn(
-                          "flex items-center p-3 rounded-md transition-colors cursor-pointer",
-                          isActive(item.path)
-                            ? "bg-green-700 text-white shadow-md"
-                            : "hover:bg-neutral-700 text-neutral-300"
-                        )}
-                      >
-                        {item.icon}
-                        {isSidebarOpen && <span className="ml-2">{item.title}</span>}
-                      </div>
-                    </TooltipTrigger>
-                    {!isSidebarOpen && (
-                      <TooltipContent>{item.title}</TooltipContent>
-                    )}
-                  </Tooltip>
-                </Link>
+                {item.isExternal ? (
+                  <a href={item.path} target="_blank" rel="noopener noreferrer">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div
+                          className={cn(
+                            "flex items-center p-3 rounded-md transition-colors cursor-pointer",
+                            "hover:bg-neutral-700 text-neutral-300"
+                          )}
+                        >
+                          {item.icon}
+                          {isSidebarOpen && <span className="ml-2">{item.title}</span>}
+                        </div>
+                      </TooltipTrigger>
+                      {!isSidebarOpen && (
+                        <TooltipContent>{item.title}</TooltipContent>
+                      )}
+                    </Tooltip>
+                  </a>
+                ) : (
+                  <Link href={item.path}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div
+                          className={cn(
+                            "flex items-center p-3 rounded-md transition-colors cursor-pointer",
+                            isActive(item.path)
+                              ? "bg-green-700 text-white shadow-md"
+                              : "hover:bg-neutral-700 text-neutral-300"
+                          )}
+                        >
+                          {item.icon}
+                          {isSidebarOpen && <span className="ml-2">{item.title}</span>}
+                        </div>
+                      </TooltipTrigger>
+                      {!isSidebarOpen && (
+                        <TooltipContent>{item.title}</TooltipContent>
+                      )}
+                    </Tooltip>
+                  </Link>
+                )}
               </li>
             ))}
           </ul>
@@ -193,11 +214,11 @@ export default function Sidebar() {
       icon: <Truck className="h-5 w-5 mr-2" />,
       path: "/rapport-generating",
     },
-    {
-      title: "factures-templates ",
-      icon: <Package className="h-5 w-5 mr-2" />,
-      path: "/factures-templates",
-    },
+    // {
+    //   title: "factures-templates ",
+    //   icon: <Package className="h-5 w-5 mr-2" />,
+    //   path: "/factures-templates",
+    // },
     {
       title: "Inventaire",
       icon: <ClipboardList className="h-5 w-5 mr-2" />,
@@ -209,9 +230,10 @@ export default function Sidebar() {
       path: "/logistique/fichedexpidition",
     },
     {
-      title: "Archife",
+      title: "Archifage",
       icon: <ClipboardList className="h-5 w-5 mr-2" />,
-      path: "/archifage",
+      path: "https://archifage.fruitsforyou.ma",
+      isExternal: true,
     },
   ];
 
@@ -284,7 +306,8 @@ export default function Sidebar() {
     {
       title: "Archivage des facture  ",
       icon: <ArchiveRestore className="h-5 w-5 mr-2" />,
-      path: "/Archivagedesfacture",
+      path: "https://archifage.fruitsforyou.ma",
+      isExternal: true,
     },
 
   ];

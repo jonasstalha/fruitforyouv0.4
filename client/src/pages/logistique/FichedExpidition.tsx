@@ -5,7 +5,7 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { FilePlus, Printer, RefreshCw, Check, Save, ExternalLink } from 'lucide-react';
 import { addItemToBox } from '../../lib/firebaseService';
-import { collection, getDocs, query, where, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, query, where, addDoc, updateDoc, doc as firestoreDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { firestore, auth, storage } from '@/lib/firebase';
 import { v4 as uuidv4 } from 'uuid';
@@ -66,7 +66,7 @@ interface ExpeditionFormData {
 const productVarieties = ['Hass', 'Fuerte', 'Pinkerton', 'Reed', 'Zutano', 'Bacon', 'Gwen', 'Lamb Hass'];
 
 // Define dropdown options
-const etatPaletteOptions = ['Bonne', 'Moyenne', 'Mauvaise'];
+const etatPaletteOptions = ['C', 'NC']; // C = Conforme, NC = Non Conforme
 const conformiteOptions = ['C', 'NC']; // C = Conforme, NC = Non Conforme
 
 // Initial empty row structure
@@ -247,17 +247,36 @@ export default function FichedExpidition() {
   const handleChange = (rowIndex: number, field: keyof ExpeditionRow, value: string) => {
     const updatedRows = [...rows];
     
-    // If changing product variety in the first row, apply to all rows
+    // If changing product variety in the first row, apply only to rows with data
     if (field === 'produitVariete' && rowIndex === 0) {
-      // Only apply to rows that have NBR de Colis filled
+      // Apply to all rows that have some data (not completely empty)
       updatedRows.forEach((row, index) => {
-        if (row.nbrColis) {
+        // Check if row has any data besides produitVariete
+        const hasData = row.nbrColis || row.calibre || row.temperatureProduit || 
+                       row.etatPalette || row.conformiteEtiquettes || row.dessiccation;
+        
+        if (index === 0 || hasData) {
+          // Always update first row, and rows that have data
           updatedRows[index] = {
             ...row,
             [field]: value
           };
         }
       });
+    } else if (field === 'nbrColis' && value && updatedRows[0].produitVariete) {
+      // When typing in Nbr Colis, also apply the product variety from first row
+      updatedRows[rowIndex] = { 
+        ...updatedRows[rowIndex], 
+        [field]: value,
+        produitVariete: updatedRows[0].produitVariete
+      };
+    } else if (field !== 'produitVariete' && value && updatedRows[0].produitVariete && !updatedRows[rowIndex].produitVariete) {
+      // When typing in any other field (except produitVariete), apply the product variety from first row if current row doesn't have one
+      updatedRows[rowIndex] = { 
+        ...updatedRows[rowIndex], 
+        [field]: value,
+        produitVariete: updatedRows[0].produitVariete
+      };
     } else {
       // Normal behavior for other changes
       updatedRows[rowIndex] = { 
@@ -352,10 +371,10 @@ export default function FichedExpidition() {
       // First row of fields with enhanced styling
       // Date field
       doc.setFillColor(250, 250, 250);
-      doc.roundedRect(10, startY, 35, 12, 2, 2, 'F');
-      doc.roundedRect(10, startY, 35, 12, 2, 2);
+      doc.rect(10, startY, 35, 12, 'F');
+      doc.rect(10, startY, 35, 12);
       doc.setFont("helvetica", "bold");
-      doc.setTextColor(darkGreen[0], darkGreen[1], darkGreen[2]);
+      doc.setTextColor(darkGreen[0], darkGreen[1], darkGreen[2]); // Green title
       doc.text('Date expédition :', 12, startY + 4);
       doc.setFont("helvetica", "normal");
       doc.setTextColor(gray[0], gray[1], gray[2]);
@@ -363,10 +382,10 @@ export default function FichedExpidition() {
       
       // Hour field with similar styling
       doc.setFillColor(250, 250, 250);
-      doc.roundedRect(45, startY, 25, 12, 2, 2, 'F');
-      doc.roundedRect(45, startY, 25, 12, 2, 2);
+      doc.rect(45, startY, 25, 12, 'F');
+      doc.rect(45, startY, 25, 12);
       doc.setFont("helvetica", "bold");
-      doc.setTextColor(darkGreen[0], darkGreen[1], darkGreen[2]);
+      doc.setTextColor(darkGreen[0], darkGreen[1], darkGreen[2]); // Green title
       doc.text('Heure:', 47, startY + 4);
       doc.setFont("helvetica", "normal");
       doc.setTextColor(gray[0], gray[1], gray[2]);
@@ -374,10 +393,10 @@ export default function FichedExpidition() {
       
       // Transporter field with enhanced styling
       doc.setFillColor(250, 250, 250);
-      doc.roundedRect(70, startY, 45, 12, 2, 2, 'F');
-      doc.roundedRect(70, startY, 45, 12, 2, 2);
+      doc.rect(70, startY, 45, 12, 'F');
+      doc.rect(70, startY, 45, 12);
       doc.setFont("helvetica", "bold");
-      doc.setTextColor(darkGreen[0], darkGreen[1], darkGreen[2]);
+      doc.setTextColor(darkGreen[0], darkGreen[1], darkGreen[2]); // Green title
       doc.text('Nom du', 72, startY + 4);
       doc.text('transporteur :', 72, startY + 8);
       doc.setFont("helvetica", "normal");
@@ -386,14 +405,22 @@ export default function FichedExpidition() {
       
       // Registration field with enhanced styling
       doc.setFillColor(250, 250, 250);
-      doc.roundedRect(115, startY, 45, 12, 2, 2, 'F');
-      doc.roundedRect(115, startY, 45, 12, 2, 2);
+      doc.rect(115, startY, 45, 12, 'F');
+      doc.rect(115, startY, 45, 12);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(darkGreen[0], darkGreen[1], darkGreen[2]); // Green title
       doc.text('Matricule', 117, startY + 4);
       doc.text('camion :', 117, startY + 8);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(gray[0], gray[1], gray[2]);
       doc.text(headerData.matricule || '', 117, startY + 11);
       
       doc.rect(160, startY, 40, 12); // Temperature field
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(darkGreen[0], darkGreen[1], darkGreen[2]); // Green title
       doc.text('T° camion :', 162, startY + 4);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(gray[0], gray[1], gray[2]);
       doc.text(`${headerData.tempCamion || ''}°C`, 162, startY + 9);
       
       // Second row - Checkboxes section
@@ -402,7 +429,11 @@ export default function FichedExpidition() {
       
       // Hygiene section
       doc.rect(10, checkY, 60, 12);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(darkGreen[0], darkGreen[1], darkGreen[2]); // Green title
       doc.text('Hygiène du camion :', 12, checkY + 6);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(gray[0], gray[1], gray[2]);
       
       // Draw checkboxes for Hygiene
       doc.rect(45, checkY + 3, checkboxSize, checkboxSize);
@@ -421,7 +452,11 @@ export default function FichedExpidition() {
       
       // Odeur section
       doc.rect(70, checkY, 45, 12);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(darkGreen[0], darkGreen[1], darkGreen[2]); // Green title
       doc.text('Odeur :', 72, checkY + 6);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(gray[0], gray[1], gray[2]);
       
       // Draw checkboxes for Odeur
       doc.rect(90, checkY + 3, checkboxSize, checkboxSize);
@@ -440,17 +475,29 @@ export default function FichedExpidition() {
       
       // Destination
       doc.rect(115, checkY, 45, 12);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(darkGreen[0], darkGreen[1], darkGreen[2]); // Green title
       doc.text('Nom client :', 117, checkY + 4);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(gray[0], gray[1], gray[2]);
       doc.text(clientName || '', 117, checkY + 9);
       
       doc.rect(160, checkY, 40, 12);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(darkGreen[0], darkGreen[1], darkGreen[2]); // Green title
       doc.text('Destination :', 162, checkY + 4);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(gray[0], gray[1], gray[2]);
       doc.text(headerData.destination || '', 162, checkY + 9);
       
       // Thermo king status
       doc.rect(10, checkY + 12, 190, 12);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(darkGreen[0], darkGreen[1], darkGreen[2]); // Green title
       doc.text('État de fonctionnement du', 12, checkY + 18);
       doc.text('thermo king :', 12, checkY + 22);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(gray[0], gray[1], gray[2]);
       
       // Draw checkboxes for Thermo King
       doc.rect(70, checkY + 17, checkboxSize, checkboxSize);
@@ -610,7 +657,7 @@ export default function FichedExpidition() {
             
             if (!querySnapshot.empty) {
               const docId = querySnapshot.docs[0].id;
-              await updateDoc(doc(firestore, 'expeditions', docId), {
+              await updateDoc(firestoreDoc(firestore, 'expeditions', docId), {
                 pdfURL: localPdfUrl,  // Store reference to local PDF
                 updatedAt: serverTimestamp()
               });
@@ -764,7 +811,7 @@ export default function FichedExpidition() {
           if (!querySnapshot.empty) {
             // Update existing document
             const docId = querySnapshot.docs[0].id;
-            await updateDoc(doc(firestore, 'expeditions', docId), {
+            await updateDoc(firestoreDoc(firestore, 'expeditions', docId), {
               ...expeditionData,
               updatedAt: serverTimestamp()
             });
@@ -1169,10 +1216,7 @@ export default function FichedExpidition() {
                       <select
                         value={row.produitVariete}
                         onChange={(e) => handleChange(rowIndex, 'produitVariete', e.target.value)}
-                        className={`w-full p-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all appearance-none ${
-                          !row.nbrColis ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
-                        }`}
-                        disabled={!row.nbrColis}
+                        className="w-full p-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all appearance-none bg-white"
                       >
                         <option value="">Sélectionner</option>
                         {productVarieties.map((variety) => (

@@ -33,6 +33,11 @@ import DocumentTemplates from "@/pages/comptability/DocumentTemplates";
 import FichedExpidition from "@/pages/logistique/FichedExpidition";
 import Rapportqualité from "@/pages/quality/Rapportqualité";
 import Archivagedescontroles from "@/pages/quality/Archivagedescontroles";
+import QualityControlChiefPhaseWrapper from "@/pages/quality/QualityControlChiefPhase";
+// import QualityControlTestPage from "@/pages/quality/QualityControlTestPage";
+import FirebaseConnectionTest from "@/components/FirebaseConnectionTest";
+import QualityControlDebug from "@/components/QualityControlDebug";
+import QualityControlSaveTest from "@/components/QualityControlSaveTest";
 import ReportsPagee from "@/pages/tracability/ReportsPage";
 import FarmDetailPage from "@/pages/farm-detail-page";
 import NewProductPage from "@/pages/new-product-page";
@@ -95,6 +100,11 @@ function AuthenticatedRoutes() {
         <Route path="/traceability" component={StatisticsPage} />
         <Route path="/inventory" component={inventory} />
         <Route path="/qualitycontrol" component={qualitycontrol} />
+        <Route path="/quality-chief" component={QualityControlChiefPhaseWrapper} />
+        {/* <Route path="/quality-test" component={QualityControlTestPage} /> */}
+        <Route path="/firebase-test" component={FirebaseConnectionTest} />
+        <Route path="/quality-debug" component={QualityControlDebug} />
+        <Route path="/quality-save-test" component={QualityControlSaveTest} />
         <Route path="/personnelmanagement" component={personnelmanagement} />
         <Route path="/calculedeconsomation" component={calculedeconsomation} />
         <Route path="/logistique/history" component={DocumentArchive} />

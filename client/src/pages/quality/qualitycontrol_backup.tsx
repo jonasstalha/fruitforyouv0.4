@@ -1,17 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Save, FileText, AlertTriangle, Check, X, Plus, Trash2, Copy, SplitSquareHorizontal, Upload, Cloud, CloudOff } from 'lucide-react';
+import { Save, FileText, AlertTriangle, Check, X, Plus, Trash2, Copy, SplitSquareHorizontal } from 'lucide-react';
 import { jsPDF } from "jspdf"; // Import jsPDF for PDF generation
 // Extend PaletteData to support dynamic keys for columns
 import logo from '../../../assets/icon.png';
 import Tooltip from '@mui/material/Tooltip';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import { 
-  saveQualityControlLot, 
-  uploadQualityControlImage, 
-  getQualityControlLots,
-  QualityControlLot as FirebaseLot,
-  QualityControlFormData 
-} from '../../lib/qualityControlService';
 
 interface PaletteData {
   [key: string]: string | undefined;
@@ -75,46 +68,39 @@ interface QualityControlLot {
   lotNumber: string;
   formData: FormData;
   images: File[];
-  imageUrls?: string[]; // Firebase Storage URLs
-  status: 'draft' | 'completed' | 'submitted' | 'chief_approved' | 'chief_rejected';
-  phase: 'controller' | 'chief';
+  status: 'draft' | 'completed' | 'submitted';
   createdAt: string;
   updatedAt: string;
-  controller?: string;
-  chief?: string;
-  chiefComments?: string;
-  chiefApprovalDate?: string;
-  syncedToFirebase?: boolean;
 }
 
 const emptyPaletteData = (): PaletteData => ({
-  firmness: '0',
-  rotting: '0',
-  foreignMatter: '0',
-  withered: 'C',
-  hardenedEndoderm: '0',
-  parasitePresence: '0',
-  parasiteAttack: '0',
-  temperature: 'C',
-  odorOrTaste: 'C',
-  packageWeight: '0',
-  shapeDefect: '0',
-  colorDefect: '0',
-  epidermisDefect: '0',
-  homogeneity: 'C',
-  missingBrokenGrains: '0',
-  size: '0',
+  firmness: '',
+  rotting: '',
+  foreignMatter: '',
+  withered: '',
+  hardenedEndoderm: '',
+  parasitePresence: '',
+  parasiteAttack: '',
+  temperature: '',
+  odorOrTaste: '',
+  packageWeight: '',
+  shapeDefect: '',
+  colorDefect: '',
+  epidermisDefect: '',
+  homogeneity: '',
+  missingBrokenGrains: '',
+  size: '',
   packageCount: '',
-  packagingState: 'C',
-  labelingPresence: 'C',
-  corners: 'C',
-  horizontalStraps: 'C',
-  paletteSheet: 'C',
-  woodenPaletteState: 'C',
+  packagingState: '',
+  labelingPresence: '',
+  corners: '',
+  horizontalStraps: '',
+  paletteSheet: '',
+  woodenPaletteState: '',
   grossWeight: '',
   netWeight: '',
   internalLotNumber: '',
-  paletteConformity: 'C',
+  paletteConformity: '',
   requiredNetWeight: ''
 });
 
@@ -133,16 +119,6 @@ const initializeFormData = (): FormData => ({
 });
 
 export default function EnhancedPDFGenerator() {
-  // --- PDF value and coordinate sanitization helpers ---
-  const safeText = (value: any) => (typeof value === 'string' ? value : '');
-  const safeNumber = (value: any) => (typeof value === 'number' && !isNaN(value) ? value : 0);
-  const sanitizeText = (text: string) =>
-    text
-      .replace(/✓/g, 'v')
-      .replace(/≤/g, '<=')
-      .replace(/≥/g, '>=')
-      .replace(/✗/g, 'x')
-      .replace(/[^ -\x7F]/g, ''); // Remove all non-ASCII
   const [lots, setLots] = useState<QualityControlLot[]>([]);
   const [activeLotId, setActiveLotId] = useState<string | null>(null);
   const [paletteCount, setPaletteCount] = useState<number>(5);
@@ -158,9 +134,6 @@ export default function EnhancedPDFGenerator() {
   const [filteredRapports, setFilteredRapports] = useState<FormData[]>([]);
   const [validation, setValidation] = useState<{[key:string]: string}>({});
   const [lotImages, setLotImages] = useState<{[lotId: string]: File[]}>({});
-  const [uploadingImages, setUploadingImages] = useState<{[lotId: string]: boolean}>({});
-  const [syncStatus, setSyncStatus] = useState<{[lotId: string]: 'synced' | 'pending' | 'error'}>({});
-  const [currentUser] = useState('Quality Controller'); // This should come from auth context
 
   // Get current lot data
   const getCurrentLot = (): QualityControlLot | null => {
@@ -180,19 +153,14 @@ export default function EnhancedPDFGenerator() {
       lotNumber: `LOT-${String(lots.length + 1).padStart(3, '0')}`,
       formData: initializeFormData(),
       images: [],
-      imageUrls: [],
       status: 'draft',
-      phase: 'controller',
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      controller: currentUser,
-      syncedToFirebase: false
+      updatedAt: new Date().toISOString()
     };
     
     setLots(prev => [...prev, newLot]);
     setActiveLotId(newLot.id);
     setLotImages(prev => ({ ...prev, [newLot.id]: [] }));
-    setSyncStatus(prev => ({ ...prev, [newLot.id]: 'pending' }));
   };
 
   // Initialize with first lot
@@ -213,7 +181,6 @@ export default function EnhancedPDFGenerator() {
       formData: { ...sourceLot.formData },
       images: [...sourceLot.images],
       status: 'draft',
-      phase: 'controller',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -389,15 +356,13 @@ export default function EnhancedPDFGenerator() {
 
   const calculateAverages = (field: string): string => {
     const currentFormData = getCurrentFormData();
-    const allValues = currentFormData.palettes
-      .slice(0, paletteCount) // Only consider the selected number of palettes
+    const validValues = currentFormData.palettes
       .map((palette: PaletteData) => parseFloat(palette[field] as string))
-      .map((val: number) => isNaN(val) ? 0 : val); // Convert NaN to 0
+      .filter((val: number) => !isNaN(val) && val !== 0);
     
-    if (allValues.length === 0) return '';
+    if (validValues.length === 0) return '';
     
-    const sum = allValues.reduce((sum: number, val: number) => sum + val, 0);
-    const average = sum / paletteCount; // Divide by total palette count, not just valid values
+    const average = validValues.reduce((sum: number, val: number) => sum + val, 0) / validValues.length;
     return average.toFixed(2);
   };
 
@@ -438,7 +403,7 @@ export default function EnhancedPDFGenerator() {
     customTableWidth: number | null = null
   ) => {
     let currentY = startY;
-    const rowHeight = 8; // Restored original height for first page
+    const rowHeight = 8; // Increased for better text fit
     const pageWidth = doc.internal.pageSize.getWidth();
     const tableWidth = customTableWidth ?? (pageWidth - 20);
     // Color scheme
@@ -450,7 +415,7 @@ export default function EnhancedPDFGenerator() {
     // Calculate responsive column widths
     let columnWidths;
     if (hasAverageColumn) {
-      const firstColWidth = 60; // Decreased from 80 to 60 to make it smaller
+      const firstColWidth = 60;
       const avgColWidth = 25;
       const remainingWidth = tableWidth - firstColWidth - avgColWidth;
       const dataColWidth = remainingWidth / (headers.length - 2);
@@ -480,7 +445,9 @@ export default function EnhancedPDFGenerator() {
         const textWidth = doc.getTextWidth(header);
         doc.text(header, currentX + (columnWidths[index] / 2) - (textWidth / 2), currentY + 5.5);
       }
-      doc.line(currentX, currentY, currentX, currentY + rowHeight);
+      if (index > 0) {
+        doc.line(currentX, currentY, currentX, currentY + rowHeight);
+      }
       currentX += columnWidths[index];
     });
     doc.line(currentX, currentY, currentX, currentY + rowHeight);
@@ -526,12 +493,14 @@ export default function EnhancedPDFGenerator() {
             doc.text(cellText, currentX + (columnWidths[cellIndex] / 2) - (doc.getTextWidth(cellText) / 2), currentY + 5.5);
           }
         }
-        doc.setDrawColor(...borderColor);
-        const x1 = safeNumber(currentX);
-        const y1 = safeNumber(currentY);
-        const x2 = safeNumber(currentX);
-        const y2 = safeNumber(currentY + rowHeight);
-        doc.line(x1, y1, x2, y2);
+        if (cellIndex > 0) {
+          doc.setDrawColor(...borderColor);
+          const x1 = safeNumber(currentX);
+          const y1 = safeNumber(currentY);
+          const x2 = safeNumber(currentX);
+          const y2 = safeNumber(currentY + rowHeight);
+          doc.line(x1, y1, x2, y2);
+        }
         currentX += columnWidths[cellIndex];
       });
       // Draw borders
@@ -560,7 +529,7 @@ export default function EnhancedPDFGenerator() {
     solidGreen: boolean = false
   ) => {
     let currentY = startY;
-    const rowHeight = 5;
+    const rowHeight = 8;
     const pageWidth = doc.internal.pageSize.getWidth();
     const tableWidth = (pageWidth - 20) * 0.5; // 50% width
     const headerBg: [number, number, number] = [230, 230, 230];
@@ -600,7 +569,9 @@ export default function EnhancedPDFGenerator() {
         const textWidth = doc.getTextWidth(header);
         doc.text(header, currentX + (columnWidths[index] / 2) - (textWidth / 2), currentY + 5.5);
       }
-      doc.line(currentX, currentY, currentX, currentY + rowHeight);
+      if (index > 0) {
+        doc.line(currentX, currentY, currentX, currentY + rowHeight);
+      }
       currentX += columnWidths[index];
     });
     doc.line(currentX, currentY, currentX, currentY + rowHeight);
@@ -644,12 +615,14 @@ export default function EnhancedPDFGenerator() {
             doc.text(cellText, currentX + (columnWidths[cellIndex] / 2) - (doc.getTextWidth(cellText) / 2), currentY + 5.5);
           }
         }
-        doc.setDrawColor(...borderColor);
-        const x1 = safeNumber(currentX);
-        const y1 = safeNumber(currentY);
-        const x2 = safeNumber(currentX);
-        const y2 = safeNumber(currentY + rowHeight);
-        doc.line(x1, y1, x2, y2);
+        if (cellIndex > 0) {
+          doc.setDrawColor(...borderColor);
+          const x1 = safeNumber(currentX);
+          const y1 = safeNumber(currentY);
+          const x2 = safeNumber(currentX);
+          const y2 = safeNumber(currentY + rowHeight);
+          doc.line(x1, y1, x2, y2);
+        }
         currentX += columnWidths[cellIndex];
       });
       // Draw borders
@@ -677,19 +650,15 @@ export default function EnhancedPDFGenerator() {
     customTableWidth: number | null = null
   ) => {
     let currentY = startY;
-    const rowHeight = 8; // Reduced from 12 to 8 to fit within A4 page
+    const rowHeight = 8;
     const pageWidth = doc.internal.pageSize.getWidth();
     const tableWidth = customTableWidth ?? (pageWidth - 20) * 0.5;
     const headerBg: [number, number, number] = [230, 230, 230];
     const alternateRow: [number, number, number] = [248, 248, 248];
     const borderColor: [number, number, number] = [64, 64, 64];
     const moyenneGreen: [number, number, number] = [144, 238, 144];
-    
-    // Custom column widths: Better balanced for content
-    const toleranceColWidth = tableWidth * 0.50; // 50% for Tolérance column (longer text)
-    const otherColWidth = tableWidth * 0.167; // ~16.7% for each other column (3 × 16.7% = 50%)
-    const columnWidths = [toleranceColWidth, otherColWidth, otherColWidth, otherColWidth];
-    
+    const equalWidth = tableWidth / headers.length;
+    const columnWidths = Array(headers.length).fill(equalWidth);
     doc.setFillColor(...headerBg);
     doc.setDrawColor(...borderColor);
     doc.setLineWidth(0.5);
@@ -704,14 +673,16 @@ export default function EnhancedPDFGenerator() {
         doc.rect(currentX, currentY, columnWidths[index], rowHeight, 'F');
       }
       const textWidth = doc.getTextWidth(header);
-      doc.text(header, currentX + (columnWidths[index] / 2) - (textWidth / 2), currentY + rowHeight / 2 + 1.5);
-      doc.line(currentX, currentY, currentX, currentY + rowHeight);
+      doc.text(header, currentX + (columnWidths[index] / 2) - (textWidth / 2), currentY + 5.5);
+      if (index > 0) {
+        doc.line(currentX, currentY, currentX, currentY + rowHeight);
+      }
       currentX += columnWidths[index];
     });
     doc.line(currentX, currentY, currentX, currentY + rowHeight);
     currentY += rowHeight;
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(6); // Reduced from 7 to 6 for better fit in smaller rows
+    doc.setFontSize(7);
     data.forEach((row: (string | number)[], rowIndex: number) => {
       const shouldFill = rowIndex % 2 === 1;
       if (shouldFill) {
@@ -738,23 +709,25 @@ export default function EnhancedPDFGenerator() {
           const wrappedText = wrapText(doc, cellText, columnWidths[cellIndex] - 4);
           if (Array.isArray(wrappedText) && wrappedText.length > 0) {
             wrappedText.forEach((line, i) => {
-              doc.text(line, currentX + 2, currentY + 2.5 + i * 2.5);
+              doc.text(line, currentX + 2, currentY + 5.5 + i * 3.5);
             });
           } else if (typeof cellText === 'string' && cellText.trim() !== '') {
-            doc.text(cellText, currentX + 2, currentY + rowHeight / 2 + 1.5);
+            doc.text(cellText, currentX + 2, currentY + 5.5);
           }
         } else {
           if (typeof cellText === 'string' && cellText.trim() !== '') {
             const textWidth = doc.getTextWidth(cellText);
-            doc.text(cellText, currentX + (columnWidths[cellIndex] / 2) - (textWidth / 2), currentY + rowHeight / 2 + 1.5);
+            doc.text(cellText, currentX + (columnWidths[cellIndex] / 2) - (textWidth / 2), currentY + 5.5);
           }
         }
-        doc.setDrawColor(...borderColor);
-        const x1 = safeNumber(currentX);
-        const y1 = safeNumber(currentY);
-        const x2 = safeNumber(currentX);
-        const y2 = safeNumber(currentY + rowHeight);
-        doc.line(x1, y1, x2, y2);
+        if (cellIndex > 0) {
+          doc.setDrawColor(...borderColor);
+          const x1 = safeNumber(currentX);
+          const y1 = safeNumber(currentY);
+          const x2 = safeNumber(currentX);
+          const y2 = safeNumber(currentY + rowHeight);
+          doc.line(x1, y1, x2, y2);
+        }
         currentX += columnWidths[cellIndex];
       });
       // Draw borders
@@ -913,21 +886,7 @@ export default function EnhancedPDFGenerator() {
             row.push('');
           }
         }
-        
-        // Fields that should have empty moyenne columns (like UI)
-        const fieldsWithoutAverage = [
-          'withered', 'temperature', 'odorOrTaste', 'homogeneity', 'size', 
-          'packageCount', 'packagingState', 'labelingPresence', 'corners', 
-          'horizontalStraps', 'paletteSheet', 'woodenPaletteState', 
-          'internalLotNumber', 'paletteConformity'
-        ];
-        
-        if (fieldsWithoutAverage.includes(field)) {
-          row.push(''); // Empty moyenne column
-        } else {
-          row.push(calculateAverages(field)); // Calculate moyenne
-        }
-        
+        row.push(calculateAverages(field));
         return row;
       };
       const minCharData = [
@@ -943,9 +902,9 @@ export default function EnhancedPDFGenerator() {
       ];
       // III) Contrôle des caractéristiques spécifiques
       const specCharData = [
-        generateDataRow('shapeDefect', 'Défaut de forme (%)'),
-        generateDataRow('colorDefect', 'Défaut de coloration (%)'),
-        generateDataRow('epidermisDefect', 'Défaut d\'épiderme (%)'),
+        generateDataRow('shapeDefect', 'Défaut de\nforme (%)'),
+        generateDataRow('colorDefect', 'Défaut de\ncoloration (%)'),
+        generateDataRow('epidermisDefect', 'Défaut dépiderme(%)'),
         generateDataRow('homogeneity', 'Homogénéité'),
         generateDataRow('missingBrokenGrains', 'Extrémité des grains (%)'),
         generateDataRow('size', 'Calibre')
@@ -955,16 +914,11 @@ export default function EnhancedPDFGenerator() {
       const finalProductData = [
         generateDataRow('size', 'Calibre'),
         generateDataRow('packageCount', 'Nombre colis/palette'),
-        generateDataRow('packagingState', 'État d\'emballage'),
-        generateDataRow('labelingPresence', 'Présence d\'étiquetage'),
-        generateDataRow('corners', 'Cornières'),
-        generateDataRow('horizontalStraps', 'Feuillards horizontal'),
-        generateDataRow('paletteSheet', 'Fiche palette'),
-        generateDataRow('woodenPaletteState', 'État de la palette en bois'),
-        generateDataRow('grossWeight', 'Poids Brut'),
-        generateDataRow('netWeight', 'Poids Net'),
+        generateDataRow('packagingState', 'État d\'emballage (C/NC)'),
+        generateDataRow('labelingPresence', 'Présence d\'étiquetage (C/NC)'),
+        generateDataRow('paletteSheet', 'Fiche palette (C/NC)'),
         generateDataRow('internalLotNumber', 'N° Lot Interne'),
-        generateDataRow('paletteConformity', 'Conformité de la palette')
+        generateDataRow('paletteConformity', 'Conformité palette (C/NC)')
       ];
 
       // Patch drawEnhancedTable to allow custom tableWidth (50% for this table)
@@ -977,7 +931,7 @@ export default function EnhancedPDFGenerator() {
         solidGreen: boolean = false
       ) => {
         let currentY = startY;
-        const rowHeight = 5;
+        const rowHeight = 8;
         const pageWidth = doc.internal.pageSize.getWidth();
         const tableWidth = (pageWidth - 20) * 0.5; // 50% width
         const headerBg: [number, number, number] = [230, 230, 230];
@@ -987,7 +941,7 @@ export default function EnhancedPDFGenerator() {
         const moyenneGreen: [number, number, number] = [144, 238, 144];
         let columnWidths;
         if (hasAverageColumn) {
-          const firstColWidth = 60 * 0.5; // Decreased from 80 to 60, then halved for 50% table
+          const firstColWidth = 60 * 0.5;
           const avgColWidth = 25 * 0.5;
           const remainingWidth = tableWidth - firstColWidth - avgColWidth;
           const dataColWidth = remainingWidth / (headers.length - 2);
@@ -1017,7 +971,9 @@ export default function EnhancedPDFGenerator() {
             const textWidth = doc.getTextWidth(header);
             doc.text(header, currentX + (columnWidths[index] / 2) - (textWidth / 2), currentY + 5.5);
           }
-          doc.line(currentX, currentY, currentX, currentY + rowHeight);
+          if (index > 0) {
+            doc.line(currentX, currentY, currentX, currentY + rowHeight);
+          }
           currentX += columnWidths[index];
         });
         doc.line(currentX, currentY, currentX, currentY + rowHeight);
@@ -1061,12 +1017,14 @@ export default function EnhancedPDFGenerator() {
                 doc.text(cellText, currentX + (columnWidths[cellIndex] / 2) - (doc.getTextWidth(cellText) / 2), currentY + 5.5);
               }
             }
-            doc.setDrawColor(...borderColor);
-            const x1 = safeNumber(currentX);
-            const y1 = safeNumber(currentY);
-            const x2 = safeNumber(currentX);
-            const y2 = safeNumber(currentY + rowHeight);
-            doc.line(x1, y1, x2, y2);
+            if (cellIndex > 0) {
+              doc.setDrawColor(...borderColor);
+              const x1 = safeNumber(currentX);
+              const y1 = safeNumber(currentY);
+              const x2 = safeNumber(currentX);
+              const y2 = safeNumber(currentY + rowHeight);
+              doc.line(x1, y1, x2, y2);
+            }
             currentX += columnWidths[cellIndex];
           });
           // Draw borders
@@ -1096,19 +1054,15 @@ export default function EnhancedPDFGenerator() {
         customTableWidth: number | null = null
       ) => {
         let currentY = startY;
-        const rowHeight = 8; // Reduced from 12 to 8 to fit within A4 page
+        const rowHeight = 8;
         const pageWidth = doc.internal.pageSize.getWidth();
         const tableWidth = customTableWidth ?? (pageWidth - 20) * 0.5;
         const headerBg: [number, number, number] = [230, 230, 230];
         const alternateRow: [number, number, number] = [248, 248, 248];
         const borderColor: [number, number, number] = [64, 64, 64];
         const moyenneGreen: [number, number, number] = [144, 238, 144];
-        
-        // Custom column widths: Better balanced for content
-        const toleranceColWidth = tableWidth * 0.50; // 50% for Tolérance column (longer text)
-        const otherColWidth = tableWidth * 0.167; // ~16.7% for each other column (3 × 16.7% = 50%)
-        const columnWidths = [toleranceColWidth, otherColWidth, otherColWidth, otherColWidth];
-        
+        const equalWidth = tableWidth / headers.length;
+        const columnWidths = Array(headers.length).fill(equalWidth);
         // Draw header
         doc.setFillColor(...headerBg);
         doc.setDrawColor(...borderColor);
@@ -1120,15 +1074,17 @@ export default function EnhancedPDFGenerator() {
         let currentX = 10;
         headers.forEach((header, index) => {
           const textWidth = doc.getTextWidth(header);
-          doc.text(header, currentX + (columnWidths[index] / 2) - (textWidth / 2), currentY + rowHeight / 2 + 1.5);
-          doc.line(currentX, currentY, currentX, currentY + rowHeight);
+          doc.text(header, currentX + (columnWidths[index] / 2) - (textWidth / 2), currentY + 5.5);
+          if (index > 0) {
+            doc.line(currentX, currentY, currentX, currentY + rowHeight);
+          }
           currentX += columnWidths[index];
         });
         doc.line(currentX, currentY, currentX, currentY + rowHeight);
         currentY += rowHeight;
         // Draw data rows
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(6); // Reduced from 7 to 6 for better fit in smaller rows
+        doc.setFontSize(7);
         data.forEach((row: (string | number)[], rowIndex: number) => {
           // Always make the 'Résultat moyen' cell green
           let currentX = 10;
@@ -1154,23 +1110,25 @@ export default function EnhancedPDFGenerator() {
               const wrappedText = wrapText(doc, cellText, columnWidths[cellIndex] - 4);
               if (Array.isArray(wrappedText) && wrappedText.length > 0) {
                 wrappedText.forEach((line, i) => {
-                  doc.text(line, currentX + 2, currentY + 2.5 + i * 2.5);
+                  doc.text(line, currentX + 2, currentY + 5.5 + i * 3.5);
                 });
               } else if (typeof cellText === 'string' && cellText.trim() !== '') {
-                doc.text(cellText, currentX + 2, currentY + rowHeight / 2 + 1.5);
+                doc.text(cellText, currentX + 2, currentY + 5.5);
               }
             } else {
               if (typeof cellText === 'string' && cellText.trim() !== '') {
                 const textWidth = doc.getTextWidth(cellText);
-                doc.text(cellText, currentX + (columnWidths[cellIndex] / 2) - (textWidth / 2), currentY + rowHeight / 2 + 1.5);
+                doc.text(cellText, currentX + (columnWidths[cellIndex] / 2) - (textWidth / 2), currentY + 5.5);
               }
             }
-            doc.setDrawColor(...borderColor);
-            const x1 = safeNumber(currentX);
-            const y1 = safeNumber(currentY);
-            const x2 = safeNumber(currentX);
-            const y2 = safeNumber(currentY + rowHeight);
-            doc.line(x1, y1, x2, y2);
+            if (cellIndex > 0) {
+              doc.setDrawColor(...borderColor);
+              const x1 = safeNumber(currentX);
+              const y1 = safeNumber(currentY);
+              const x2 = safeNumber(currentX);
+              const y2 = safeNumber(currentY + rowHeight);
+              doc.line(x1, y1, x2, y2);
+            }
             currentX += columnWidths[cellIndex];
           });
           // Draw borders
@@ -1208,91 +1166,6 @@ export default function EnhancedPDFGenerator() {
       // --- New Page for the rest ---
       doc.addPage('landscape');
       let page2Y = 20;
-
-      // Compact version of drawEnhancedTable for page 2
-      const drawEnhancedTableCompact = (
-        doc: jsPDF,
-        startY: number,
-        headers: string[],
-        data: (string | number)[][],
-        hasAverageColumn: boolean = true,
-        solidGreen: boolean = false,
-        customTableWidth: number | null = null
-      ) => {
-        let currentY = startY;
-        const rowHeight = 6; // Reduced from 7 to 6 (+1px from original 5px)
-        const pageWidth = doc.internal.pageSize.getWidth();
-        const tableWidth = customTableWidth ?? (pageWidth - 20);
-        const headerBg: [number, number, number] = [230, 230, 230];
-        const lightCol: [number, number, number] = [245, 245, 245];
-        const alternateRow: [number, number, number] = [248, 248, 248];
-        const borderColor: [number, number, number] = [64, 64, 64];
-        const moyenneGreen: [number, number, number] = [144, 238, 144];
-        let columnWidths;
-        if (hasAverageColumn) {
-          const firstColWidth = 60; // Decreased from 80 to 60 to make it smaller
-          const avgColWidth = 25;
-          const remainingWidth = tableWidth - firstColWidth - avgColWidth;
-          const dataColWidth = remainingWidth / (headers.length - 2);
-          columnWidths = [firstColWidth, ...Array(headers.length - 2).fill(dataColWidth), avgColWidth];
-        } else {
-          const equalWidth = tableWidth / headers.length;
-          columnWidths = Array(headers.length).fill(equalWidth);
-        }
-
-        // Draw header
-        doc.setFillColor(...headerBg);
-        doc.rect(10, currentY, tableWidth, rowHeight, 'FD');
-        doc.setTextColor(0, 0, 0);
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(8);
-        let currentX = 10;
-        headers.forEach((header, index) => {
-          if (index === headers.length - 1 && hasAverageColumn) {
-            doc.setFillColor(...moyenneGreen);
-            doc.rect(currentX, currentY, columnWidths[index], rowHeight, 'F');
-          }
-          const textY = currentY + rowHeight / 2 + 1;
-          doc.text(header, currentX + columnWidths[index] / 2, textY, { align: 'center' });
-          doc.line(currentX, currentY, currentX, currentY + rowHeight);
-          currentX += columnWidths[index];
-        });
-        doc.line(currentX, currentY, currentX, currentY + rowHeight);
-        currentY += rowHeight;
-
-        // Draw data rows
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(6);
-        data.forEach((row, rowIndex) => {
-          if (rowIndex % 2 === 0) {
-            doc.setFillColor(...alternateRow);
-            doc.rect(10, currentY, tableWidth, rowHeight, 'F');
-          }
-          let currentX = 10;
-          row.forEach((cell, cellIndex) => {
-            if (cellIndex === row.length - 1 && hasAverageColumn) {
-              doc.setFillColor(...moyenneGreen);
-              doc.rect(currentX, currentY, columnWidths[cellIndex], rowHeight, 'F');
-            }
-            const textY = currentY + rowHeight / 2 + 1;
-            doc.setTextColor(0, 0, 0);
-            
-            // Left-align first column text, center-align all others
-            if (cellIndex === 0) {
-              doc.text(String(cell), currentX + 2, textY);
-            } else {
-              doc.text(String(cell), currentX + columnWidths[cellIndex] / 2, textY, { align: 'center' });
-            }
-            
-            doc.line(currentX, currentY, currentX, currentY + rowHeight);
-            currentX += columnWidths[cellIndex];
-          });
-          doc.line(currentX, currentY, currentX, currentY + rowHeight);
-          doc.line(10, currentY + rowHeight, 10 + tableWidth, currentY + rowHeight);
-          currentY += rowHeight;
-        });
-        return currentY + 5;
-      };
 
       // Move tolerance headers/data here for use on page 2
       const toleranceHeaders = ['Tolérance', 'Résultat moyen', 'Conforme', 'Non conforme'];
@@ -1359,21 +1232,21 @@ export default function EnhancedPDFGenerator() {
       ];
 
       // III) Contrôle des caractéristiques spécifiques (Page 2)
-      doc.setFontSize(10);
+      doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(34, 139, 34);
       doc.text('III) Contrôle des caractéristiques spécifiques', 10, page2Y);
-      page2Y += 6;
-      page2Y = drawEnhancedTableCompact(doc, page2Y, paletteHeaders, specCharData);
+      page2Y += 8;
+      page2Y = drawEnhancedTable(doc, page2Y, paletteHeaders, specCharData);
 
       // IV) Contrôle du produit fini (Page 2)
-      doc.setFontSize(10);
+      doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(34, 139, 34);
       doc.text('IV) Contrôle du produit fini', 10, page2Y);
-      page2Y += 6;
+      page2Y += 8;
       // Use full page width for the table
-      page2Y = drawEnhancedTableCompact(doc, page2Y, [
+      page2Y = drawEnhancedTable(doc, page2Y, [
         '',
         '1',
         '2',
@@ -1405,11 +1278,11 @@ export default function EnhancedPDFGenerator() {
       ], finalProductData, true);
 
       // V) Tolérance (Page 2)
-      doc.setFontSize(10);
+      doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(34, 139, 34);
       doc.text('V) Tolérance et Conformité', 10, page2Y);
-      page2Y += 6;
+      page2Y += 8;
       page2Y = drawToleranceTable(doc, page2Y, toleranceHeaders, toleranceData, halfTableWidth);
 
       // Enhanced signature section (Page 2)
@@ -1417,7 +1290,7 @@ export default function EnhancedPDFGenerator() {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10);
       const sigX = 15 + halfTableWidth + 20; // 20mm padding after table
-      const sigY = page2Y - (toleranceData.length * 9 + 9); // align with table top (updated for row height 8)
+      const sigY = page2Y - (toleranceData.length * 8 + 8); // align with table top
       doc.text('Contrôleur:', sigX, sigY + 2);
       doc.text('Signature:', sigX, sigY + 20);
      
@@ -1455,190 +1328,10 @@ export default function EnhancedPDFGenerator() {
     return Object.keys(errors).length === 0;
   };
 
-  // Upload images to Firebase Storage
-  const uploadLotImages = async (lotId: string, images: File[]): Promise<string[]> => {
-    if (images.length === 0) return [];
-    
-    setUploadingImages(prev => ({ ...prev, [lotId]: true }));
-    
-    try {
-      const uploadPromises = images.map(image => 
-        uploadQualityControlImage(image, lotId, 'lot')
-      );
-      
-      const urls = await Promise.all(uploadPromises);
-      return urls;
-    } catch (error) {
-      console.error('Error uploading images:', error);
-      throw error;
-    } finally {
-      setUploadingImages(prev => ({ ...prev, [lotId]: false }));
-    }
-  };
-
-  // Sync lot to Firebase
-  const syncLotToFirebase = async (lot: QualityControlLot) => {
-    try {
-      setSyncStatus(prev => ({ ...prev, [lot.id]: 'pending' }));
-      
-      // Upload images first
-      const currentLotImages = lotImages[lot.id] || [];
-      const imageUrls = await uploadLotImages(lot.id, currentLotImages);
-      
-      // Prepare Firebase lot data
-      const firebaseLot: FirebaseLot = {
-        id: lot.id,
-        lotNumber: lot.lotNumber,
-        formData: lot.formData as QualityControlFormData,
-        images: imageUrls,
-        status: lot.status,
-        phase: lot.phase,
-        createdAt: lot.createdAt,
-        updatedAt: new Date().toISOString(),
-        controller: lot.controller,
-        chief: lot.chief,
-        chiefComments: lot.chiefComments,
-        chiefApprovalDate: lot.chiefApprovalDate
-      };
-      
-      // Save to Firebase
-      const savedId = await saveQualityControlLot(firebaseLot);
-      
-      // Update local state
-      setLots(prev => prev.map(l => 
-        l.id === lot.id 
-          ? { ...l, imageUrls, syncedToFirebase: true, id: savedId }
-          : l
-      ));
-      
-      setSyncStatus(prev => ({ ...prev, [lot.id]: 'synced' }));
-      
-      return savedId;
-    } catch (error) {
-      console.error('Error syncing lot to Firebase:', error);
-      setSyncStatus(prev => ({ ...prev, [lot.id]: 'error' }));
-      throw error;
-    }
-  };
-
-  // Load lots from Firebase on mount
-  useEffect(() => {
-    const loadFirebaseLots = async () => {
-      try {
-        console.log('Loading lots from Firebase...');
-        const firebaseLots = await getQualityControlLots('controller');
-        console.log('Loaded', firebaseLots.length, 'lots from Firebase');
-        
-        const convertedLots: QualityControlLot[] = firebaseLots.map(lot => ({
-          id: lot.id,
-          lotNumber: lot.lotNumber,
-          formData: lot.formData as FormData,
-          images: [], // Local files are empty for Firebase lots
-          imageUrls: lot.images,
-          status: lot.status,
-          phase: lot.phase,
-          createdAt: lot.createdAt,
-          updatedAt: lot.updatedAt,
-          controller: lot.controller,
-          chief: lot.chief,
-          chiefComments: lot.chiefComments,
-          chiefApprovalDate: lot.chiefApprovalDate,
-          syncedToFirebase: true
-        }));
-        
-        if (convertedLots.length > 0) {
-          setLots(convertedLots);
-          setActiveLotId(convertedLots[0].id);
-          
-          // Set sync status for all loaded lots
-          const statusMap: {[key: string]: 'synced'} = {};
-          convertedLots.forEach(lot => {
-            statusMap[lot.id] = 'synced';
-          });
-          setSyncStatus(statusMap);
-          
-          console.log('Successfully loaded and set', convertedLots.length, 'lots');
-        } else {
-          console.log('No lots found in Firebase, creating first lot');
-          // Only create new lot if no Firebase lots exist
-          createNewLot();
-        }
-      } catch (error) {
-        console.error('Error loading Firebase lots:', error);
-        // If Firebase fails, still create a new lot for offline use
-        if (lots.length === 0) {
-          createNewLot();
-        }
-      }
-    };
-    
-    // Only load from Firebase if no lots exist locally
-    if (lots.length === 0) {
-      loadFirebaseLots();
-    }
-  }, []);
-
-  // Manual sync function to pull latest data from Firebase
-  const handleSyncFromFirebase = async () => {
-    try {
-      console.log('Manually syncing from Firebase...');
-      const firebaseLots = await getQualityControlLots('controller');
-      
-      const convertedLots: QualityControlLot[] = firebaseLots.map(lot => ({
-        id: lot.id,
-        lotNumber: lot.lotNumber,
-        formData: lot.formData as FormData,
-        images: [],
-        imageUrls: lot.images,
-        status: lot.status,
-        phase: lot.phase,
-        createdAt: lot.createdAt,
-        updatedAt: lot.updatedAt,
-        controller: lot.controller,
-        chief: lot.chief,
-        chiefComments: lot.chiefComments,
-        chiefApprovalDate: lot.chiefApprovalDate,
-        syncedToFirebase: true
-      }));
-
-      // Merge with existing local lots that might not be synced yet
-      const localOnlyLots = lots.filter(lot => !lot.syncedToFirebase);
-      const allLots = [...convertedLots, ...localOnlyLots];
-      
-      setLots(allLots);
-      
-      // Update sync status
-      const statusMap: {[key: string]: 'synced' | 'pending' | 'error'} = {};
-      convertedLots.forEach(lot => {
-        statusMap[lot.id] = 'synced';
-      });
-      localOnlyLots.forEach(lot => {
-        statusMap[lot.id] = syncStatus[lot.id] || 'pending';
-      });
-      setSyncStatus(statusMap);
-      
-      alert(`✅ Synchronisation réussie!\n\n📥 ${convertedLots.length} lots chargés depuis Firebase\n📱 ${localOnlyLots.length} lots locaux conservés\n📊 Total: ${allLots.length} lots`);
-      
-    } catch (error) {
-      console.error('Error syncing from Firebase:', error);
-      alert(`❌ Erreur de synchronisation:\n${(error as Error).message}\n\nVérifiez votre connexion et réessayez.`);
-    }
-  };
-
-  // Initialize with first lot if none exist
-  useEffect(() => {
-    if (lots.length === 0) {
-      createNewLot();
-    }
-  }, [lots.length]);
-
   // Save lot data and send to rapport section
   const handleSave = async () => {
     const currentLot = getCurrentLot();
-    if (!currentLot) {
-      alert('Aucun lot sélectionné.');
-      return;
-    }
+    if (!currentLot) return;
 
     // Validate form data
     if (!validateForm()) {
@@ -1646,170 +1339,25 @@ export default function EnhancedPDFGenerator() {
       return;
     }
 
-    try {
-      // Show loading state
-      setSyncStatus(prev => ({ ...prev, [currentLot.id]: 'pending' }));
+    // Update lot status
+    updateLotData(activeLotId!, { status: 'completed' });
 
-      // Prepare comprehensive lot data with all details
-      const comprehensiveFormData = {
-        ...currentLot.formData,
-        // Ensure all palette data is included
-        palettes: currentLot.formData.palettes.map((palette, index) => ({
-          ...palette,
-          paletteIndex: index + 1,
-          timestamp: new Date().toISOString()
-        })),
-        // Add calculated results
-        calculatedResults: {
-          minCharacteristics: results.minCharacteristics,
-          totalDefects: results.totalDefects,
-          missingBrokenGrains: results.missingBrokenGrains,
-          weightConformity: results.weightConformity,
-          isConform: results.isConform
-        },
-        // Add averages for all numeric fields
-        averages: {
-          firmness: calculateAverages('firmness'),
-          rotting: calculateAverages('rotting'),
-          foreignMatter: calculateAverages('foreignMatter'),
-          hardenedEndoderm: calculateAverages('hardenedEndoderm'),
-          parasitePresence: calculateAverages('parasitePresence'),
-          parasiteAttack: calculateAverages('parasiteAttack'),
-          packageWeight: calculateAverages('packageWeight'),
-          shapeDefect: calculateAverages('shapeDefect'),
-          colorDefect: calculateAverages('colorDefect'),
-          epidermisDefect: calculateAverages('epidermisDefect'),
-          missingBrokenGrains: calculateAverages('missingBrokenGrains'),
-          grossWeight: calculateAverages('grossWeight'),
-          netWeight: calculateAverages('netWeight'),
-          requiredNetWeight: calculateAverages('requiredNetWeight')
-        },
-        // Add submission metadata
-        submissionMetadata: {
-          submittedBy: currentUser,
-          submittedAt: new Date().toISOString(),
-          paletteCount: paletteCount,
-          activeTab: activeTab,
-          browserInfo: navigator.userAgent,
-          version: "2.0"
-        }
-      };
+    // Save to localStorage for rapport section
+    const rapportData = {
+      ...currentLot,
+      images: lotImages[activeLotId!] || [],
+      submittedAt: new Date().toISOString()
+    };
 
-      // Update lot with comprehensive data and completed status
-      const updatedLot = { 
-        ...currentLot, 
-        formData: comprehensiveFormData,
-        status: 'completed' as const,
-        controller: currentUser,
-        updatedAt: new Date().toISOString()
-      };
+    const existingRapports = JSON.parse(localStorage.getItem('quality_rapports') || '[]');
+    existingRapports.push(rapportData);
+    localStorage.setItem('quality_rapports', JSON.stringify(existingRapports));
 
-      // Update local state first
-      updateLotData(activeLotId!, { 
-        formData: comprehensiveFormData,
-        status: 'completed',
-        controller: currentUser,
-        updatedAt: new Date().toISOString()
-      });
+    // Show success message
+    alert('Lot sauvegardé avec succès et envoyé vers la section rapport!');
 
-      // Upload images and sync to Firebase
-      const currentLotImages = lotImages[activeLotId!] || [];
-      let imageUrls: string[] = [];
-      
-      if (currentLotImages.length > 0) {
-        setUploadingImages(prev => ({ ...prev, [activeLotId!]: true }));
-        try {
-          imageUrls = await uploadLotImages(activeLotId!, currentLotImages);
-          console.log('Images uploaded successfully:', imageUrls);
-        } catch (imageError) {
-          console.error('Error uploading images:', imageError);
-          alert('Avertissement: Erreur lors du téléchargement des images, mais les données ont été sauvegardées.');
-        } finally {
-          setUploadingImages(prev => ({ ...prev, [activeLotId!]: false }));
-        }
-      }
-
-      // Prepare Firebase lot data with all details
-      const firebaseLot: FirebaseLot = {
-        id: currentLot.id,
-        lotNumber: currentLot.lotNumber,
-        formData: comprehensiveFormData as QualityControlFormData,
-        images: imageUrls,
-        status: 'completed',
-        phase: currentLot.phase || 'controller',
-        createdAt: currentLot.createdAt,
-        updatedAt: new Date().toISOString(),
-        controller: currentUser,
-        chief: currentLot.chief,
-        chiefComments: currentLot.chiefComments,
-        chiefApprovalDate: currentLot.chiefApprovalDate
-      };
-      
-      // Save to Firebase with detailed error handling
-      try {
-        const savedId = await saveQualityControlLot(firebaseLot);
-        console.log('Lot saved to Firebase with ID:', savedId);
-        
-        // Update local state with Firebase ID and sync status
-        setLots(prev => prev.map(l => 
-          l.id === currentLot.id 
-            ? { ...l, imageUrls, syncedToFirebase: true, id: savedId }
-            : l
-        ));
-        
-        setSyncStatus(prev => ({ ...prev, [currentLot.id]: 'synced' }));
-
-        // Save to localStorage for backward compatibility
-        const rapportData = {
-          ...updatedLot,
-          images: currentLotImages,
-          imageUrls: imageUrls,
-          submittedAt: new Date().toISOString(),
-          firebaseId: savedId
-        };
-
-        const existingRapports = JSON.parse(localStorage.getItem('quality_rapports') || '[]');
-        // Remove any existing report with the same lot ID to avoid duplicates
-        const filteredRapports = existingRapports.filter((r: any) => r.id !== currentLot.id);
-        filteredRapports.push(rapportData);
-        localStorage.setItem('quality_rapports', JSON.stringify(filteredRapports));
-
-        // Show success message with details
-        alert(`✅ Lot "${currentLot.lotNumber}" sauvegardé avec succès!\n\n` +
-              `📋 Données: ${Object.keys(comprehensiveFormData).length} champs\n` +
-              `🎯 Palettes: ${paletteCount} palettes analysées\n` +
-              `📷 Images: ${imageUrls.length} images téléchargées\n` +
-              `☁️ Firebase: Synchronisé avec ID ${savedId}\n` +
-              `📊 Conformité: ${results.isConform ? 'Conforme' : 'Non conforme'}`);
-
-        // Update filtered rapports to show current lot
-        setFilteredRapports([comprehensiveFormData]);
-
-      } catch (firebaseError) {
-        console.error('Error saving to Firebase:', firebaseError);
-        setSyncStatus(prev => ({ ...prev, [currentLot.id]: 'error' }));
-        
-        // Still save to localStorage as backup
-        const rapportData = {
-          ...updatedLot,
-          images: currentLotImages,
-          submittedAt: new Date().toISOString(),
-          firebaseError: (firebaseError as Error).message
-        };
-
-        const existingRapports = JSON.parse(localStorage.getItem('quality_rapports') || '[]');
-        const filteredRapports = existingRapports.filter((r: any) => r.id !== currentLot.id);
-        filteredRapports.push(rapportData);
-        localStorage.setItem('quality_rapports', JSON.stringify(filteredRapports));
-
-        alert(`⚠️ Données sauvegardées localement mais erreur Firebase:\n${(firebaseError as Error).message}\n\nUtilisez le bouton de resynchronisation pour réessayer.`);
-      }
-
-    } catch (error) {
-      console.error('Error saving lot:', error);
-      setSyncStatus(prev => ({ ...prev, [currentLot.id]: 'error' }));
-      alert(`❌ Erreur lors de la sauvegarde:\n${(error as Error).message}\n\nVérifiez votre connexion et réessayez.`);
-    }
+    // Update filtered rapports to show current lot
+    setFilteredRapports([currentLot.formData]);
   };
 
   // Submit all lots to archive
@@ -1876,123 +1424,89 @@ export default function EnhancedPDFGenerator() {
   const conformityText = results.isConform ? 'Conforme' : 'Non conforme';
 
   return (
-    <div className="flex flex-col h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      {/* Enhanced Lot Management Header */}
-      <div className="bg-white border-b border-gray-200 shadow-lg">
-        <div className="p-6">
-          <div className="flex justify-between items-center mb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-r from-green-600 to-green-700 rounded-lg flex items-center justify-center">
-                <FileText className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">
-                  Contrôle de la Qualité
-                </h1>
-                <p className="text-sm text-gray-600 flex items-center gap-1">
-                  Gestion des lots pour le contrôle qualité
-                  <Tooltip title="Système de gestion des lots pour le contrôle qualité">
-                    <InfoOutlinedIcon className="text-blue-400" fontSize="small" />
-                  </Tooltip>
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={createNewLot}
-                className="px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-200 flex items-center gap-2 font-medium"
-              >
-                <Plus className="w-4 h-4" />
-                Nouveau Lot
-              </button>
-            </div>
+    <div className="flex flex-col h-screen bg-gray-50">
+      {/* Lot Management Header */}
+      <div className="bg-white border-b p-4 shadow-sm">
+        <div className="flex justify-between items-center mb-4">
+          <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+            CONTROLE DE LA QUALITE - GESTION DES LOTS
+            <Tooltip title="Système de gestion des lots pour le contrôle qualité">
+              <InfoOutlinedIcon className="text-blue-400" fontSize="small" />
+            </Tooltip>
+          </h1>
+          <div className="flex gap-3">
+            <button
+              onClick={createNewLot}
+              className="px-4 py-2 bg-green-600 text-white rounded shadow hover:bg-green-700 transition flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Nouveau Lot
+            </button>
+            <button
+              onClick={handleSubmitAllLots}
+              className="px-4 py-2 bg-purple-600 text-white rounded shadow hover:bg-purple-700 transition flex items-center gap-2"
+            >
+              <FileText className="w-4 h-4" />
+              Soumettre tous les lots
+            </button>
           </div>
+        </div>
 
-          {/* Enhanced Lot Tabs */}
-          <div className="flex gap-3 overflow-x-auto pb-2">
-            {lots.map((lot) => (
-              <div
-                key={lot.id}
-                className={`group flex items-center gap-3 px-5 py-3 rounded-xl border-2 cursor-pointer transition-all duration-200 min-w-fit ${
-                  activeLotId === lot.id
-                    ? 'bg-gradient-to-r from-blue-50 to-blue-100 border-blue-300 text-blue-800 shadow-md'
-                    : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-md'
-                }`}
+        {/* Lot Tabs */}
+        <div className="flex gap-2 overflow-x-auto pb-2">
+          {lots.map((lot) => (
+            <div
+              key={lot.id}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg border cursor-pointer transition ${
+                activeLotId === lot.id
+                  ? 'bg-blue-100 border-blue-300 text-blue-800'
+                  : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+              }`}
+            >
+              <span 
+                className="font-medium whitespace-nowrap"
+                onClick={() => setActiveLotId(lot.id)}
               >
-                <div 
-                  className="flex items-center gap-3"
-                  onClick={() => setActiveLotId(lot.id)}
+                {lot.lotNumber}
+              </span>
+              <div className="flex items-center gap-1">
+                <span className={`w-2 h-2 rounded-full ${
+                  lot.status === 'completed' ? 'bg-green-500' :
+                  lot.status === 'submitted' ? 'bg-purple-500' :
+                  'bg-yellow-500'
+                }`}></span>
+                <button
+                  onClick={() => duplicateLot(lot.id)}
+                  className="text-blue-600 hover:text-blue-800 p-1"
+                  title="Dupliquer"
                 >
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${
-                    activeLotId === lot.id 
-                      ? 'bg-blue-600 text-white' 
-                      : 'bg-gray-100 text-gray-600 group-hover:bg-gray-200'
-                  }`}>
-                    {lot.lotNumber.split('-')[1]}
-                  </div>
-                  <div>
-                    <span className="font-semibold whitespace-nowrap block">
-                      {lot.lotNumber}
-                    </span>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                        lot.status === 'completed' ? 'bg-green-100 text-green-800' :
-                        lot.status === 'submitted' ? 'bg-purple-100 text-purple-800' :
-                        lot.status === 'chief_approved' ? 'bg-emerald-100 text-emerald-800' :
-                        lot.status === 'chief_rejected' ? 'bg-red-100 text-red-800' :
-                        'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {lot.status === 'draft' ? 'Brouillon' :
-                         lot.status === 'completed' ? 'Terminé' :
-                         lot.status === 'submitted' ? 'Soumis' :
-                         lot.status === 'chief_approved' ? 'Approuvé' :
-                         lot.status === 'chief_rejected' ? 'Rejeté' : 'En cours'}
-                      </span>
-                      {/* Enhanced Firebase sync status */}
-                      {syncStatus[lot.id] === 'synced' && (
-                        <div className="flex items-center gap-1 text-green-600">
-                          <Cloud className="w-3 h-3" />
-                          <span className="text-xs">Sync</span>
-                        </div>
-                      )}
-                      {syncStatus[lot.id] === 'pending' && (
-                        <div className="flex items-center gap-1 text-blue-600">
-                          <Upload className="w-3 h-3 animate-pulse" />
-                          <span className="text-xs">Sync...</span>
-                        </div>
-                      )}
-                      {syncStatus[lot.id] === 'error' && (
-                        <div className="flex items-center gap-1 text-red-600">
-                          <CloudOff className="w-3 h-3" />
-                          <span className="text-xs">Erreur</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 ml-2">
-                  <button
-                    onClick={() => duplicateLot(lot.id)}
-                    className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors"
-                    title="Dupliquer"
-                  >
-                    <Copy className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => deleteLot(lot.id)}
-                    className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
-                    title="Supprimer"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+                  <Copy className="w-3 h-3" />
+                </button>
+                <button
+                  onClick={() => deleteLot(lot.id)}
+                  className="text-red-600 hover:text-red-800 p-1"
+                  title="Supprimer"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
       </div>
 
-
+      {/* Current Lot Status */}
+      <div className={`w-full py-3 px-6 border-b-2 ${conformityColor} flex items-center justify-between transition-all duration-300`}> 
+        <span className="font-semibold text-lg">
+          Lot {getCurrentLot()?.lotNumber || ''} - Statut : {conformityText}
+        </span>
+        <span className="text-sm">
+          Min. Caractéristiques: <b>{results.minCharacteristics.toFixed(2)}</b> | 
+          Défauts totaux: <b>{results.totalDefects.toFixed(2)}</b> | 
+          Grains manquants: <b>{results.missingBrokenGrains.toFixed(2)}</b> | 
+          Poids: <b>{results.weightConformity.toFixed(2)}%</b>
+        </span>
+      </div>
       {/* Main content area */}
       <div className="flex-1 p-6 overflow-auto transition-all duration-300">
         <div className="max-w-7xl mx-auto bg-white rounded-lg shadow-md p-6">
@@ -2009,102 +1523,16 @@ export default function EnhancedPDFGenerator() {
               onClick={handleGenerateReport}
               className="px-5 py-2 bg-blue-600 text-white rounded shadow hover:bg-blue-700 focus:ring-2 focus:ring-blue-400 font-semibold transition"
               disabled={isGenerating}
-              title="Générer un rapport PDF"
             >
-              {isGenerating ? (
-                <>
-                  <Upload className="w-4 h-4 inline mr-2 animate-spin" />
-                  Génération...
-                </>
-              ) : (
-                <>
-                  <FileText className="w-4 h-4 inline mr-2" />
-                  Générer PDF
-                </>
-              )}
+              {isGenerating ? 'Génération en cours...' : 'Télécharger le rapport PDF'}
             </button>
-            
             <button
               onClick={handleSave}
-              className="px-5 py-2 bg-green-600 text-white rounded shadow hover:bg-green-700 focus:ring-2 focus:ring-green-400 font-semibold transition"
-              title="Sauvegarder et synchroniser avec Firebase"
+              className="px-5 py-2 bg-green-600 text-white rounded shadow hover:bg-green-700 focus:ring-2 focus:ring-green-400 font-semibold transition flex items-center"
             >
-              <Save className="w-4 h-4 inline mr-2" />
+              <Save className="inline-block mr-2 w-4 h-4" />
               Sauvegarder
             </button>
-            
-            <button
-              onClick={handleSyncFromFirebase}
-              className="px-5 py-2 bg-cyan-600 text-white rounded shadow hover:bg-cyan-700 focus:ring-2 focus:ring-cyan-400 font-semibold transition"
-              title="Synchroniser depuis Firebase"
-            >
-              <Cloud className="w-4 h-4 inline mr-2" />
-              Sync Firebase
-            </button>
-            
-            <button
-              onClick={handleSubmitAllLots}
-              className="px-5 py-2 bg-purple-600 text-white rounded shadow hover:bg-purple-700 focus:ring-2 focus:ring-purple-400 font-semibold transition"
-              title="Soumettre tous les lots complétés"
-            >
-              <Upload className="w-4 h-4 inline mr-2" />
-              Soumettre lots
-            </button>
-            
-            <button
-              onClick={() => {
-                // Clear all cached data
-                setLots([]);
-                setActiveLotId(null);
-                setActiveTab(0);
-                setPaletteCount(1);
-                setSyncStatus({});
-                setUploadingImages({});
-                setValidation({});
-                setFilteredRapports([]);
-                setLotImages({});
-                setResults({
-                  avgQualite: '',
-                  avgFirmness: '',
-                  avgPoids: '',
-                  recommendation: ''
-                });
-                
-                // Clear localStorage cache if any
-                localStorage.removeItem('qualityControlCache');
-                localStorage.removeItem('qualityControlLots');
-                
-                // Show success message
-                alert('Cache vidé avec succès!');
-              }}
-              className="px-5 py-2 bg-red-600 text-white rounded shadow hover:bg-red-700 focus:ring-2 focus:ring-red-400 font-semibold transition"
-              title="Vider le cache de la page"
-            >
-              <Trash2 className="w-4 h-4 inline mr-2" />
-              Vider Cache
-            </button>
-            
-            {/* Manual sync button */}
-            {getCurrentLot() && syncStatus[getCurrentLot()!.id] === 'error' && (
-              <button
-                onClick={() => getCurrentLot() && syncLotToFirebase(getCurrentLot()!)}
-                className="px-5 py-2 bg-orange-600 text-white rounded shadow hover:bg-orange-700 focus:ring-2 focus:ring-orange-400 font-semibold transition"
-                disabled={uploadingImages[getCurrentLot()!.id]}
-                title="Resynchroniser avec Firebase"
-              >
-                {uploadingImages[getCurrentLot()!.id] ? (
-                  <>
-                    <Upload className="w-4 h-4 inline mr-2 animate-spin" />
-                    Sync...
-                  </>
-                ) : (
-                  <>
-                    <Cloud className="w-4 h-4 inline mr-2" />
-                    Sync Firebase
-                  </>
-                )}
-              </button>
-            )}
           </div>
 
           {/* Display exact rapports for the current lot after save */}
@@ -2321,28 +1749,27 @@ export default function EnhancedPDFGenerator() {
             
             {/* Controle poids Tab */}
             {activeTab === 1 && (
-              <div className="mb-10">
+              <div className="overflow-x-auto mb-10">
                 <h2 className="text-xl font-bold text-green-700 mb-4 border-b pb-2 flex items-center gap-2">
                   I) Contrôle du poids du colis
                   <Tooltip title="Vérification du poids de chaque palette."><InfoOutlinedIcon fontSize="inherit" /></Tooltip>
                 </h2>
-                <div className="overflow-x-auto border rounded-lg shadow-md">
-                  <table className="bg-white border-collapse" style={{ minWidth: `${Math.max(800, 64 + (paletteCount * 80) + 80)}px` }}>
+                <table className="min-w-full bg-white border-collapse rounded-lg shadow-md">
                   <thead className="sticky top-0 z-20">
                     <tr className="bg-green-100">
-                      <th className="py-2 px-3 border sticky left-0 bg-green-100 z-30 w-64 min-w-64">Paramètre</th>
+                      <th className="py-2 px-3 border sticky left-0 bg-green-100 z-10">Paramètre</th>
                       {Array.from({ length: paletteCount }).map((_, i) => (
-                        <th key={i} className="py-2 px-3 border bg-white text-center w-20 min-w-20">{i+1}</th>
+                        <th key={i} className="py-2 px-3 border bg-white text-center">{i+1}</th>
                       ))}
-                      <th className="py-2 px-3 border bg-green-200 w-20 min-w-20">Moyenne</th>
+                      <th className="py-2 px-3 border bg-green-200">Moyenne</th>
                     </tr>
                   </thead>
                   <tbody>
                     {/* Poids du colis (kg) */}
                     <tr className="even:bg-gray-50 transition-all">
-                      <td className="py-2 px-3 border sticky left-0 bg-white z-20 font-medium w-64 min-w-64">Poids du colis (kg)</td>
+                      <td className="py-2 px-3 border sticky left-0 bg-white z-10 font-medium">Poids du colis (kg)</td>
                       {Array.from({ length: paletteCount }).map((_, i) => (
-                        <td key={i} className="py-1 px-2 border w-20 min-w-20">
+                        <td key={i} className="py-1 px-2 border">
                           <input
                             type="number"
                             step="0.1"
@@ -2354,13 +1781,13 @@ export default function EnhancedPDFGenerator() {
                           />
                         </td>
                       ))}
-                      <td className="py-2 px-3 border font-medium bg-green-50 text-center w-20 min-w-20">{calculateAverages('packageWeight')}</td>
+                      <td className="py-2 px-3 border font-medium bg-green-50 text-center">{calculateAverages('packageWeight')}</td>
                     </tr>
                     {/* Poids net requis (kg) */}
                     <tr className="even:bg-gray-50 transition-all">
-                      <td className="py-2 px-3 border sticky left-0 bg-white z-20 font-medium w-64 min-w-64">Poids net requis (kg)</td>
+                      <td className="py-2 px-3 border sticky left-0 bg-white z-10 font-medium">Poids net requis (kg)</td>
                       {Array.from({ length: paletteCount }).map((_, i) => (
-                        <td key={i} className="py-1 px-2 border w-20 min-w-20">
+                        <td key={i} className="py-1 px-2 border">
                           <input
                             type="number"
                             step="0.1"
@@ -2368,17 +1795,17 @@ export default function EnhancedPDFGenerator() {
                             value={getCurrentFormData().palettes[i]?.requiredNetWeight || ''}
                             onChange={(e) => handlePaletteChange(i, 'requiredNetWeight', e.target.value)}
                             className="w-full p-1 border border-gray-200 rounded text-center"
-                            placeholder=""
+                            placeholder="0.0"
                           />
                         </td>
                       ))}
-                      <td className="py-2 px-3 border font-medium bg-green-50 text-center w-20 min-w-20">{calculateAverages('requiredNetWeight')}</td>
+                      <td className="py-2 px-3 border font-medium bg-green-50 text-center">{calculateAverages('requiredNetWeight')}</td>
                     </tr>
                     {/* Poids net (%) - Calculated field */}
                     <tr className="even:bg-gray-50 transition-all">
-                      <td className="py-2 px-3 border sticky left-0 bg-white z-20 font-medium w-64 min-w-64">Poids net (%)</td>
+                      <td className="py-2 px-3 border sticky left-0 bg-white z-10 font-medium">Poids net (%)</td>
                       {Array.from({ length: paletteCount }).map((_, i) => (
-                        <td key={i} className="py-2 px-3 border text-center bg-gray-100 w-20 min-w-20">
+                        <td key={i} className="py-2 px-3 border text-center bg-gray-100">
                           {(() => {
                             const weight = parseFloat(getCurrentFormData().palettes[i]?.packageWeight || '0');
                             const required = parseFloat(getCurrentFormData().palettes[i]?.requiredNetWeight || '0');
@@ -2389,7 +1816,7 @@ export default function EnhancedPDFGenerator() {
                           })()}
                         </td>
                       ))}
-                      <td className="py-2 px-3 border font-medium bg-green-50 text-center w-20 min-w-20">
+                      <td className="py-2 px-3 border font-medium bg-green-50 text-center">
                         {(() => {
                           const valid = getCurrentFormData().palettes.filter((p: PaletteData) => p.packageWeight && p.requiredNetWeight);
                           if (valid.length === 0) return '';
@@ -2404,34 +1831,32 @@ export default function EnhancedPDFGenerator() {
                     </tr>
                   </tbody>
                 </table>
-                </div>
               </div>
             )}
             
             {/* Controle des Caracteristiques minimales Tab */}
             {activeTab === 2 && (
-              <div className="mb-10">
+              <div className="overflow-x-auto mb-10">
                 <h2 className="text-xl font-bold text-green-700 mb-4 border-b pb-2 flex items-center gap-2">
                   II) Contrôle des caractéristiques minimales
                   <Tooltip title="Vérification des caractéristiques minimales de chaque palette."><InfoOutlinedIcon fontSize="inherit" /></Tooltip>
                 </h2>
-                <div className="overflow-x-auto border rounded-lg shadow-md">
-                  <table className="bg-white border-collapse" style={{ minWidth: `${Math.max(800, 64 + (paletteCount * 80) + 80)}px` }}>
+                <table className="min-w-full bg-white border-collapse rounded-lg shadow-md">
                   <thead className="sticky top-0 z-20">
                     <tr className="bg-green-100">
-                      <th className="py-2 px-3 border sticky left-0 bg-green-100 z-30 w-64 min-w-64">Paramètre</th>
+                      <th className="py-2 px-3 border sticky left-0 bg-green-100 z-10">Paramètre</th>
                       {Array.from({ length: paletteCount }).map((_, i) => (
-                        <th key={i} className="py-2 px-3 border bg-white text-center w-20 min-w-20">{i+1}</th>
+                        <th key={i} className="py-2 px-3 border bg-white text-center">{i+1}</th>
                       ))}
-                      <th className="py-2 px-3 border bg-green-200 w-20 min-w-20">Moyenne</th>
+                      <th className="py-2 px-3 border bg-green-200">Moyenne</th>
                     </tr>
                   </thead>
                   <tbody>
                     {/* Firmness (kgf) [13-14] (string input with Moyenne) */}
                     <tr>
-                      <td className="py-2 px-3 border sticky left-0 bg-white z-20 font-medium w-64 min-w-64">Firmness (kgf) [13-14]</td>
+                      <td className="py-2 px-3 border sticky left-0 bg-white z-10 font-medium">Firmness (kgf) [13-14]</td>
                       {Array.from({ length: paletteCount }).map((_, i) => (
-                        <td key={i} className="py-1 px-2 border w-20 min-w-20">
+                        <td key={i} className="py-1 px-2 border">
                           <input
                             type="text"
                             value={getCurrentFormData().palettes[i]?.firmness || ''}
@@ -2440,15 +1865,20 @@ export default function EnhancedPDFGenerator() {
                           />
                         </td>
                       ))}
-                      <td className="py-2 px-3 border font-medium w-20 min-w-20">
-                        {calculateAverages('firmness')}
+                      <td className="py-2 px-3 border font-medium">
+                        {(() => {
+                          const nums = getCurrentFormData().palettes
+                            .map((p: PaletteData) => parseFloat(p.firmness || ''))
+                            .filter((v: number) => !isNaN(v));
+                          return nums.length ? (nums.reduce((a: number, b: number) => a + b, 0) / nums.length).toFixed(2) : '';
+                        })()}
                       </td>
                     </tr>
                     {/* Pourriture (anthracnose) (%) */}
                     <tr>
-                      <td className="py-2 px-3 border sticky left-0 bg-white z-20 font-medium w-64 min-w-64">Pourriture (anthracnose) (%)</td>
+                      <td className="py-2 px-3 border sticky left-0 bg-white z-10 font-medium">Pourriture (anthracnose) (%)</td>
                       {Array.from({ length: paletteCount }).map((_, i) => (
-                        <td key={i} className="py-1 px-2 border w-20 min-w-20">
+                        <td key={i} className="py-1 px-2 border">
                           <input
                             type="number"
                             step="0.1"
@@ -2459,13 +1889,18 @@ export default function EnhancedPDFGenerator() {
                           />
                         </td>
                       ))}
-                      <td className="py-2 px-3 border font-medium w-20 min-w-20">
-                        {calculateAverages('rotting')}
+                      <td className="py-2 px-3 border font-medium">
+                        {(() => {
+                          const nums = getCurrentFormData().palettes
+                            .map((p: PaletteData) => parseFloat(p.rotting || ''))
+                            .filter((v: number) => !isNaN(v));
+                          return nums.length ? (nums.reduce((a: number, b: number) => a + b, 0) / nums.length).toFixed(2) : '';
+                        })()}
                       </td>
                     </tr>
                     {/* Matière étrangère visible (sable, les cheveux, ...) (%) */}
                     <tr>
-                      <td className="py-2 px-3 border sticky left-0 bg-white z-10 font-medium w-64 min-w-64">Matière étrangère visible (sable, les cheveux, ...) (%)</td>
+                      <td className="py-2 px-3 border sticky left-0 bg-white z-10 font-medium">Matière étrangère visible (sable, les cheveux, ...) (%)</td>
                       {Array.from({ length: paletteCount }).map((_, i) => (
                         <td key={i} className="py-1 px-2 border">
                           <input
@@ -2478,13 +1913,18 @@ export default function EnhancedPDFGenerator() {
                           />
                         </td>
                       ))}
-                      <td className="py-2 px-3 border font-medium w-20 min-w-20">
-                        {calculateAverages('foreignMatter')}
+                      <td className="py-2 px-3 border font-medium">
+                        {(() => {
+                          const nums = getCurrentFormData().palettes
+                            .map((p: PaletteData) => parseFloat(p.foreignMatter || ''))
+                            .filter((v: number) => !isNaN(v));
+                          return nums.length ? (nums.reduce((a: number, b: number) => a + b, 0) / nums.length).toFixed(2) : '';
+                        })()}
                       </td>
                     </tr>
                     {/* Flétri (C/NC) */}
                     <tr>
-                      <td className="py-2 px-3 border sticky left-0 bg-white z-10 font-medium w-64 min-w-64">Flétri</td>
+                      <td className="py-2 px-3 border sticky left-0 bg-white z-10 font-medium">Flétri</td>
                       {Array.from({ length: paletteCount }).map((_, i) => (
                         <td key={i} className="py-1 px-2 border">
                           <select
@@ -2502,7 +1942,7 @@ export default function EnhancedPDFGenerator() {
                     </tr>
                     {/* Endoderme durci (%) */}
                     <tr>
-                      <td className="py-2 px-3 border sticky left-0 bg-white z-10 font-medium w-64 min-w-64">Endoderme durci (%)</td>
+                      <td className="py-2 px-3 border sticky left-0 bg-white z-10 font-medium">Endoderme durci (%)</td>
                       {Array.from({ length: paletteCount }).map((_, i) => (
                         <td key={i} className="py-1 px-2 border">
                           <input
@@ -2515,13 +1955,18 @@ export default function EnhancedPDFGenerator() {
                           />
                         </td>
                       ))}
-                      <td className="py-2 px-3 border font-medium w-20 min-w-20">
-                        {calculateAverages('hardenedEndoderm')}
+                      <td className="py-2 px-3 border font-medium">
+                        {(() => {
+                          const nums = getCurrentFormData().palettes
+                            .map((p: PaletteData) => parseFloat(p.hardenedEndoderm || ''))
+                            .filter((v: number) => !isNaN(v));
+                          return nums.length ? (nums.reduce((a: number, b: number) => a + b, 0) / nums.length).toFixed(2) : '';
+                        })()}
                       </td>
                     </tr>
                     {/* Présence de parasite (%) */}
                     <tr>
-                      <td className="py-2 px-3 border sticky left-0 bg-white z-10 font-medium w-64 min-w-64">Présence de parasite (%)</td>
+                      <td className="py-2 px-3 border sticky left-0 bg-white z-10 font-medium">Présence de parasite (%)</td>
                       {Array.from({ length: paletteCount }).map((_, i) => (
                         <td key={i} className="py-1 px-2 border">
                           <input
@@ -2534,8 +1979,13 @@ export default function EnhancedPDFGenerator() {
                           />
                         </td>
                       ))}
-                      <td className="py-2 px-3 border font-medium w-20 min-w-20">
-                        {calculateAverages('parasitePresence')}
+                      <td className="py-2 px-3 border font-medium">
+                        {(() => {
+                          const nums = getCurrentFormData().palettes
+                            .map((p: PaletteData) => parseFloat(p.parasitePresence || ''))
+                            .filter((v: number) => !isNaN(v));
+                          return nums.length ? (nums.reduce((a: number, b: number) => a + b, 0) / nums.length).toFixed(2) : '';
+                        })()}
                       </td>
                     </tr>
                     {/* Présence d’attaque de parasite (%) */}
@@ -2553,13 +2003,18 @@ export default function EnhancedPDFGenerator() {
                           />
                         </td>
                       ))}
-                      <td className="py-2 px-3 border font-medium w-20 min-w-20">
-                        {calculateAverages('parasiteAttack')}
+                      <td className="py-2 px-3 border font-medium">
+                        {(() => {
+                          const nums = getCurrentFormData().palettes
+                            .map((p: PaletteData) => parseFloat(p.parasiteAttack || ''))
+                            .filter((v: number) => !isNaN(v));
+                          return nums.length ? (nums.reduce((a: number, b: number) => a + b, 0) / nums.length).toFixed(2) : '';
+                        })()}
                       </td>
                     </tr>
                     {/* Température (C/NC) */}
                     <tr>
-                      <td className="py-2 px-3 border sticky left-0 bg-white z-10 font-medium w-64 min-w-64">Température</td>
+                      <td className="py-2 px-3 border sticky left-0 bg-white z-10 font-medium">Température</td>
                       {Array.from({ length: paletteCount }).map((_, i) => (
                         <td key={i} className="py-1 px-2 border">
                           <select
@@ -2591,11 +2046,10 @@ export default function EnhancedPDFGenerator() {
                           </select>
                         </td>
                       ))}
-                      <td className="py-2 px-3 border font-medium w-20 min-w-20"></td>
+                      <td className="py-2 px-3 border font-medium"></td>
                     </tr>
                   </tbody>
                 </table>
-                </div>
               </div>
             )}
             
@@ -2609,7 +2063,7 @@ export default function EnhancedPDFGenerator() {
                 <table className="min-w-full bg-white border-collapse rounded-lg shadow-md">
                   <thead className="sticky top-0 z-20">
                     <tr className="bg-green-100">
-                      <th className="py-2 px-3 border w-64 min-w-64">Paramètre</th>
+                      <th className="py-2 px-3 border">Paramètre</th>
                       {Array.from({ length: paletteCount }).map((_, i) => (
                         <th key={i} className="py-2 px-3 border">Palette {i + 1}</th>
                       ))}
@@ -2619,7 +2073,7 @@ export default function EnhancedPDFGenerator() {
                   <tbody>
                     {/* Défaut de forme (Moyenne) */}
                     <tr>
-                      <td className="py-2 px-3 border w-64 min-w-64">Défaut de forme</td>
+                      <td className="py-2 px-3 border">Défaut de forme</td>
                       {Array.from({ length: paletteCount }).map((_, i) => (
                         <td key={i} className="py-1 px-2 border">
                           <input
@@ -2636,7 +2090,7 @@ export default function EnhancedPDFGenerator() {
                     </tr>
                     {/* Défaut de coloration (Moyenne) */}
                     <tr>
-                      <td className="py-2 px-3 border w-64 min-w-64">Défaut de coloration</td>
+                      <td className="py-2 px-3 border">Défaut de coloration</td>
                       {Array.from({ length: paletteCount }).map((_, i) => (
                         <td key={i} className="py-1 px-2 border">
                           <input
@@ -2653,7 +2107,7 @@ export default function EnhancedPDFGenerator() {
                     </tr>
                     {/* Défaut d'épiderme (Moyenne) */}
                     <tr>
-                      <td className="py-2 px-3 border w-64 min-w-64">Défaut d'épiderme</td>
+                      <td className="py-2 px-3 border">Défaut d'épiderme</td>
                       {Array.from({ length: paletteCount }).map((_, i) => (
                         <td key={i} className="py-1 px-2 border">
                           <input
@@ -2670,7 +2124,7 @@ export default function EnhancedPDFGenerator() {
                     </tr>
                     {/* Homogénéité (C/NC) */}
                     <tr>
-                      <td className="py-2 px-3 border w-64 min-w-64">Homogénéité (C/NC)</td>
+                      <td className="py-2 px-3 border">Homogénéité (C/NC)</td>
                       {Array.from({ length: paletteCount }).map((_, i) => (
                         <td key={i} className="py-1 px-2 border">
                           <input
@@ -2685,7 +2139,7 @@ export default function EnhancedPDFGenerator() {
                     </tr>
                     {/* Extrémité des grains (Moyenne) */}
                     <tr>
-                      <td className="py-2 px-3 border w-64 min-w-64">Extrémité des grains</td>
+                      <td className="py-2 px-3 border">Extrémité des grains</td>
                       {Array.from({ length: paletteCount }).map((_, i) => (
                         <td key={i} className="py-1 px-2 border">
                           <input
@@ -2702,7 +2156,7 @@ export default function EnhancedPDFGenerator() {
                     </tr>
                     {/* Manque et cassés */}
                     <tr>
-                      <td className="py-2 px-3 border w-64 min-w-64">Manque et cassés</td>
+                      <td className="py-2 px-3 border">Manque et cassés</td>
                       {Array.from({ length: paletteCount }).map((_, i) => (
                         <td key={i} className="py-1 px-2 border">
                           <input
@@ -2718,7 +2172,7 @@ export default function EnhancedPDFGenerator() {
                       <td className="py-2 px-3 border font-medium">{calculateAverages('missingBrokenGrains')}</td>
                     </tr>
                     <tr>
-                      <td className="py-2 px-3 border w-64 min-w-64">Calibre</td>
+                      <td className="py-2 px-3 border">Calibre</td>
                       {Array.from({ length: paletteCount }).map((_, i) => (
                         <td key={i} className="py-1 px-2 border">
                           <input
@@ -2748,7 +2202,7 @@ export default function EnhancedPDFGenerator() {
                 <table className="min-w-full bg-white border-collapse rounded-lg shadow-md">
                   <thead className="sticky top-0 z-20">
                     <tr className="bg-green-100">
-                      <th className="py-2 px-3 border w-64 min-w-64">Paramètre</th>
+                      <th className="py-2 px-3 border">Paramètre</th>
                       {Array.from({ length: paletteCount }).map((_, i) => (
                         <th key={i} className="py-2 px-3 border">Palette {i + 1}</th>
                       ))}
@@ -2757,7 +2211,7 @@ export default function EnhancedPDFGenerator() {
                   </thead>
                   <tbody>
                     <tr>
-                      <td className="py-2 px-3 border w-64 min-w-64">Calibre</td>
+                      <td className="py-2 px-3 border">Calibre</td>
                       {Array.from({ length: paletteCount }).map((_, i) => (
                         <td key={i} className="py-1 px-2 border">
                           <input
@@ -2773,7 +2227,7 @@ export default function EnhancedPDFGenerator() {
                       <td className="py-2 px-3 border font-medium"></td>
                     </tr>
                     <tr>
-                      <td className="py-2 px-3 border w-64 min-w-64">Nombre colis/palette</td>
+                      <td className="py-2 px-3 border">Nombre de colis/palette</td>
                       {Array.from({ length: paletteCount }).map((_, i) => (
                         <td key={i} className="py-1 px-2 border">
                           <input
@@ -2782,14 +2236,13 @@ export default function EnhancedPDFGenerator() {
                             value={getCurrentFormData().palettes[i]?.packageCount || ''}
                             onChange={(e) => handlePaletteChange(i, 'packageCount', e.target.value)}
                             className="w-full p-1 border border-gray-200 rounded text-center"
-                            placeholder=""
                           />
                         </td>
                       ))}
                       <td className="py-2 px-3 border font-medium"></td>
                     </tr>
                     <tr>
-                      <td className="py-2 px-3 border w-64 min-w-64">État d'emballage</td>
+                      <td className="py-2 px-3 border">État d'emballage</td>
                       {Array.from({ length: paletteCount }).map((_, i) => (
                         <td key={i} className="py-1 px-2 border">
                           <input
@@ -2803,7 +2256,7 @@ export default function EnhancedPDFGenerator() {
                       <td className="py-2 px-3 border font-medium"></td>
                     </tr>
                     <tr>
-                      <td className="py-2 px-3 border w-64 min-w-64">Présence d'étiquetage</td>
+                      <td className="py-2 px-3 border">Présence d'étiquetage</td>
                       {Array.from({ length: paletteCount }).map((_, i) => (
                         <td key={i} className="py-1 px-2 border">
                           <input
@@ -2816,36 +2269,9 @@ export default function EnhancedPDFGenerator() {
                       ))}
                       <td className="py-2 px-3 border font-medium"></td>
                     </tr>
+                    {/* Fiche palette (Moyenne) */}
                     <tr>
-                      <td className="py-2 px-3 border w-64 min-w-64">Cornières</td>
-                      {Array.from({ length: paletteCount }).map((_, i) => (
-                        <td key={i} className="py-1 px-2 border">
-                          <input
-                            type="text"
-                            value={getCurrentFormData().palettes[i]?.corners || ''}
-                            onChange={(e) => handlePaletteChange(i, 'corners', e.target.value)}
-                            className="w-full p-1 border border-gray-200 rounded text-center"
-                          />
-                        </td>
-                      ))}
-                      <td className="py-2 px-3 border font-medium"></td>
-                    </tr>
-                    <tr>
-                      <td className="py-2 px-3 border w-64 min-w-64">Feuillards horizontal</td>
-                      {Array.from({ length: paletteCount }).map((_, i) => (
-                        <td key={i} className="py-1 px-2 border">
-                          <input
-                            type="text"
-                            value={getCurrentFormData().palettes[i]?.horizontalStraps || ''}
-                            onChange={(e) => handlePaletteChange(i, 'horizontalStraps', e.target.value)}
-                            className="w-full p-1 border border-gray-200 rounded text-center"
-                          />
-                        </td>
-                      ))}
-                      <td className="py-2 px-3 border font-medium"></td>
-                    </tr>
-                    <tr>
-                      <td className="py-2 px-3 border w-64 min-w-64">Fiche palette</td>
+                      <td className="py-2 px-3 border">Fiche palette</td>
                       {Array.from({ length: paletteCount }).map((_, i) => (
                         <td key={i} className="py-1 px-2 border">
                           <input
@@ -2856,56 +2282,11 @@ export default function EnhancedPDFGenerator() {
                           />
                         </td>
                       ))}
-                      <td className="py-2 px-3 border font-medium bg-gray-100"></td>
+                      <td className="py-2 px-3 border font-medium">{calculateAverages('paletteSheet')}</td>
                     </tr>
+                    {/* N° Lot interne (Moyenne) */}
                     <tr>
-                      <td className="py-2 px-3 border w-64 min-w-64">État de la palette en bois</td>
-                      {Array.from({ length: paletteCount }).map((_, i) => (
-                        <td key={i} className="py-1 px-2 border">
-                          <input
-                            type="text"
-                            value={getCurrentFormData().palettes[i]?.woodenPaletteState || ''}
-                            onChange={(e) => handlePaletteChange(i, 'woodenPaletteState', e.target.value)}
-                            className="w-full p-1 border border-gray-200 rounded text-center"
-                          />
-                        </td>
-                      ))}
-                      <td className="py-2 px-3 border font-medium"></td>
-                    </tr>
-                    <tr>
-                      <td className="py-2 px-3 border w-64 min-w-64">Poids Brut</td>
-                      {Array.from({ length: paletteCount }).map((_, i) => (
-                        <td key={i} className="py-1 px-2 border">
-                          <input
-                            type="number"
-                            min="0"
-                            value={getCurrentFormData().palettes[i]?.grossWeight || ''}
-                            onChange={(e) => handlePaletteChange(i, 'grossWeight', e.target.value)}
-                            className="w-full p-1 border border-gray-200 rounded text-center"
-                            placeholder=""
-                          />
-                        </td>
-                      ))}
-                      <td className="py-2 px-3 border font-medium">{calculateAverages('grossWeight')}</td>
-                    </tr>
-                    <tr>
-                      <td className="py-2 px-3 border w-64 min-w-64">Poids Net</td>
-                      {Array.from({ length: paletteCount }).map((_, i) => (
-                        <td key={i} className="py-1 px-2 border">
-                          <input
-                            type="number"
-                            min="0"
-                            value={getCurrentFormData().palettes[i]?.netWeight || ''}
-                            onChange={(e) => handlePaletteChange(i, 'netWeight', e.target.value)}
-                            className="w-full p-1 border border-gray-200 rounded text-center"
-                            placeholder=""
-                          />
-                        </td>
-                      ))}
-                      <td className="py-2 px-3 border font-medium">{calculateAverages('netWeight')}</td>
-                    </tr>
-                    <tr>
-                      <td className="py-2 px-3 border w-64 min-w-64">N° Lot Interne</td>
+                      <td className="py-2 px-3 border">N° Lot interne</td>
                       {Array.from({ length: paletteCount }).map((_, i) => (
                         <td key={i} className="py-1 px-2 border">
                           <input
@@ -2916,10 +2297,11 @@ export default function EnhancedPDFGenerator() {
                           />
                         </td>
                       ))}
-                      <td className="py-2 px-3 border font-medium bg-gray-100"></td>
+                      <td className="py-2 px-3 border font-medium">{calculateAverages('internalLotNumber')}</td>
                     </tr>
+                    {/* Conformité de la palette */}
                     <tr>
-                      <td className="py-2 px-3 border w-64 min-w-64">Conformité de la palette</td>
+                      <td className="py-2 px-3 border">Conformité de la palette</td>
                       {Array.from({ length: paletteCount }).map((_, i) => (
                         <td key={i} className="py-1 px-2 border">
                           <input
@@ -2931,6 +2313,38 @@ export default function EnhancedPDFGenerator() {
                         </td>
                       ))}
                       <td className="py-2 px-3 border font-medium"></td>
+                    </tr>
+                    {/* Poids brut (Moyenne) */}
+                    <tr>
+                      <td className="py-2 px-3 border">Poids brut</td>
+                      {Array.from({ length: paletteCount }).map((_, i) => (
+                        <td key={i} className="py-1 px-2 border">
+                          <input
+                            type="number"
+                            min="0"
+                            value={getCurrentFormData().palettes[i]?.grossWeight || ''}
+                            onChange={(e) => handlePaletteChange(i, 'grossWeight', e.target.value)}
+                            className="w-full p-1 border border-gray-200 rounded text-center"
+                          />
+                        </td>
+                      ))}
+                      <td className="py-2 px-3 border font-medium">{calculateAverages('grossWeight')}</td>
+                    </tr>
+                    {/* Poids net (Moyenne) */}
+                    <tr>
+                      <td className="py-2 px-3 border">Poids net</td>
+                      {Array.from({ length: paletteCount }).map((_, i) => (
+                        <td key={i} className="py-1 px-2 border">
+                          <input
+                            type="number"
+                            min="0"
+                            value={getCurrentFormData().palettes[i]?.netWeight || ''}
+                            onChange={(e) => handlePaletteChange(i, 'netWeight', e.target.value)}
+                            className="w-full p-1 border border-gray-200 rounded text-center"
+                          />
+                        </td>
+                      ))}
+                      <td className="py-2 px-3 border font-medium">{calculateAverages('netWeight')}</td>
                     </tr>
                   </tbody>
                 </table>
