@@ -6,17 +6,6 @@ import logo from "../../assets/logo.png"; // Corrected path to the company logo
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 
-const demoUsers = [
-  { email: "admin@example.com", role: "Admin", description: "Full access to all sections" },
-  { email: "quality@example.com", role: "Quality", description: "Access to Menu Principal + Quality section" },
-  { email: "logistics@example.com", role: "Logistics", description: "Access to Menu Principal + Logistics section" },
-  { email: "reception@example.com", role: "Reception", description: "Access to Menu Principal + Reception section" },
-  { email: "production@example.com", role: "Production", description: "Access to Menu Principal + Production section" },
-  { email: "personnel@example.com", role: "Personnel", description: "Access to Menu Principal + Personnel section" },
-  { email: "comptabilite@example.com", role: "Comptabilité", description: "Access to Menu Principal + Comptabilité section" },
-  { email: "maintenance@example.com", role: "Maintenance", description: "Access to Menu Principal + Maintenance section" },
-];
-
 const fetchUserRole = async () => {
   const currentUser = auth.currentUser;
   if (!currentUser) return null;
@@ -41,19 +30,6 @@ export function LoginPage() {
       setLocation("/");
     } catch (error) {
       console.error("Login failed:", error);
-    }
-  };
-
-  const handleDemoUserSelect = async (userEmail: string) => {
-    setEmail(userEmail);
-    setPassword("Demo@2024!");
-    
-    // Auto-submit the form for demo users
-    try {
-      await signIn(userEmail, "Demo@2024!");
-      setLocation("/");
-    } catch (error) {
-      console.error("Demo user login failed:", error);
     }
   };
 
@@ -116,30 +92,6 @@ export function LoginPage() {
             </motion.button>
           </div>
         </form>
-
-        {/* Demo Users Section */}
-        <div className="mt-8 border-t border-gray-200 pt-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Demo Users (Password: Demo@2024!)</h3>
-          <div className="space-y-2">
-            {demoUsers.map((user, index) => (
-              <button
-                key={index}
-                onClick={() => handleDemoUserSelect(user.email)}
-                className="w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-              >
-                <div className="flex justify-between items-center">
-                  <div>
-                    <div className="font-medium text-gray-900">{user.role}</div>
-                    <div className="text-sm text-gray-500">{user.email}</div>
-                  </div>
-                  <div className="text-xs text-gray-400">
-                    {user.description}
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
       </motion.div>
     </div>
   );

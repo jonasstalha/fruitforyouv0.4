@@ -161,6 +161,14 @@ export default function EnhancedPDFGenerator() {
   const [uploadingImages, setUploadingImages] = useState<{[lotId: string]: boolean}>({});
   const [syncStatus, setSyncStatus] = useState<{[lotId: string]: 'synced' | 'pending' | 'error'}>({});
   const [currentUser] = useState('Quality Controller'); // This should come from auth context
+  // --- Search and Filter State ---
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilters, setStatusFilters] = useState({ completed: true, pending: true, submitted: true });
+  // --- Search Filter State ---
+  const [searchFilters, setSearchFilters] = useState({
+    product: {}, // e.g. { 'Avocat': true, 'Citrus': false }
+    conformity: { conform: true, nonConform: true }
+  });
 
   // Get current lot data
   const getCurrentLot = (): QualityControlLot | null => {
@@ -281,7 +289,7 @@ export default function EnhancedPDFGenerator() {
       const newPalettes = [...currentFormData.palettes];
       for (let i = currentFormData.palettes.length; i < paletteCount; i++) {
         newPalettes.push(emptyPaletteData());
-      }
+      };
       updateCurrentLotFormData({ palettes: newPalettes });
     } else if (paletteCount < currentFormData.palettes.length) {
       updateCurrentLotFormData({ 
@@ -415,7 +423,8 @@ export default function EnhancedPDFGenerator() {
       if (textWidth > maxWidth && currentLine) {
         lines.push(currentLine);
         currentLine = word;
-      } else {
+      }
+      else {
         currentLine = testLine;
       }
     }
@@ -469,17 +478,9 @@ export default function EnhancedPDFGenerator() {
     doc.setFont('helvetica', 'bold');
     let currentX = 10;
     headers.forEach((header, index) => {
-      if (index === headers.length - 1 && hasAverageColumn) {
-        doc.setFillColor(...moyenneGreen); // Always green for Moyenne column
-        doc.rect(currentX, currentY, columnWidths[index], rowHeight, 'F');
-        doc.setTextColor(0, 0, 0);
-        const textWidth = doc.getTextWidth(header);
-        doc.text(header, currentX + (columnWidths[index] / 2) - (textWidth / 2), currentY + 5.5);
-        doc.setTextColor(0, 0, 0);
-      } else {
-        const textWidth = doc.getTextWidth(header);
-        doc.text(header, currentX + (columnWidths[index] / 2) - (textWidth / 2), currentY + 5.5);
-      }
+      doc.setTextColor(0, 0, 0);
+      const textWidth = doc.getTextWidth(header);
+      doc.text(header, currentX + (columnWidths[index] / 2) - (textWidth / 2), currentY + 5.5);
       doc.line(currentX, currentY, currentX, currentY + rowHeight);
       currentX += columnWidths[index];
     });
@@ -699,10 +700,6 @@ export default function EnhancedPDFGenerator() {
     doc.setFont('helvetica', 'bold');
     let currentX = 10;
     headers.forEach((header, index) => {
-      if (index === 1) {
-        doc.setFillColor(...moyenneGreen); // Always green for Moyenne column
-        doc.rect(currentX, currentY, columnWidths[index], rowHeight, 'F');
-      }
       const textWidth = doc.getTextWidth(header);
       doc.text(header, currentX + (columnWidths[index] / 2) - (textWidth / 2), currentY + rowHeight / 2 + 1.5);
       doc.line(currentX, currentY, currentX, currentY + rowHeight);
@@ -710,25 +707,25 @@ export default function EnhancedPDFGenerator() {
     });
     doc.line(currentX, currentY, currentX, currentY + rowHeight);
     currentY += rowHeight;
+    // Draw data rows
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(6); // Reduced from 7 to 6 for better fit in smaller rows
     data.forEach((row: (string | number)[], rowIndex: number) => {
-      const shouldFill = rowIndex % 2 === 1;
-      if (shouldFill) {
-        doc.setFillColor(...alternateRow);
-        doc.rect(10, currentY, tableWidth, rowHeight, 'F');
-      }
+      // Always make the 'Résultat moyen' cell green
       let currentX = 10;
       row.forEach((cell: string | number, cellIndex: number) => {
-        doc.setTextColor(0, 0, 0);
-        // Always fill Moyenne column green (index 1)
         if (cellIndex === 1) {
           doc.setFillColor(...moyenneGreen);
           doc.rect(currentX, currentY, columnWidths[cellIndex], rowHeight, 'F');
           doc.setFont('helvetica', 'bold');
+        } else if (rowIndex % 2 === 1) {
+          doc.setFillColor(...alternateRow);
+          doc.rect(currentX, currentY, columnWidths[cellIndex], rowHeight, 'F');
+          doc.setFont('helvetica', 'normal');
         } else {
           doc.setFont('helvetica', 'normal');
         }
+        doc.setTextColor(0, 0, 0);
         let cellText = '';
         if (typeof cell === 'string' || typeof cell === 'number') {
           cellText = String(cell);
@@ -1188,6 +1185,7 @@ export default function EnhancedPDFGenerator() {
         });
         return currentY + 5;
       };
+
       // --- Draw PDF tables for each section using the same data as the UI ---
       // I) Contrôle Poids (Page 1)
       doc.setFontSize(12);

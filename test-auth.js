@@ -10,7 +10,6 @@ const demoUsers = {
   "production@example.com": { email: "production@example.com", role: "production" },
   "personnel@example.com": { email: "personnel@example.com", role: "personnel" },
   "comptabilite@example.com": { email: "comptabilite@example.com", role: "comptabilite" },
-  "maintenance@example.com": { email: "maintenance@example.com", role: "maintenance" },
 };
 
 console.log("Testing authentication:");

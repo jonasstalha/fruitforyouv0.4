@@ -17,6 +17,7 @@ import StatisticsPage from "@/pages/statistics-page";
 import MainLayout from "@/components/layout/main-layout";
 import { LoginPage } from "@/pages/login-page";
 import { AuthProvider } from "@/components/auth-provider";
+import { useLanguage } from "@/contexts/LanguageContext";
 import RapportGenerating from "./pages/logistique/rapport-generating";
 import facturestemplates from "./pages/logistique/factures-templates";
 import inventory from "./pages/logistique/inventory";
@@ -32,8 +33,8 @@ import Archivagedesfacture from "@/pages/comptability/Archivagedesfacture"
 import DocumentTemplates from "@/pages/comptability/DocumentTemplates";
 import FichedExpidition from "@/pages/logistique/FichedExpidition";
 import Rapportqualité from "@/pages/quality/Rapportqualité";
+import ArchiveRapportqualité from "@/pages/quality/Archivagedescontroles";
 import Archivagedescontroles from "@/pages/quality/Archivagedescontroles";
-import QualityControlChiefPhaseWrapper from "@/pages/quality/QualityControlChiefPhase";
 // import QualityControlTestPage from "@/pages/quality/QualityControlTestPage";
 import FirebaseConnectionTest from "@/components/FirebaseConnectionTest";
 import QualityControlDebug from "@/components/QualityControlDebug";
@@ -100,7 +101,6 @@ function AuthenticatedRoutes() {
         <Route path="/traceability" component={StatisticsPage} />
         <Route path="/inventory" component={inventory} />
         <Route path="/qualitycontrol" component={qualitycontrol} />
-        <Route path="/quality-chief" component={QualityControlChiefPhaseWrapper} />
         {/* <Route path="/quality-test" component={QualityControlTestPage} /> */}
         <Route path="/firebase-test" component={FirebaseConnectionTest} />
         <Route path="/quality-debug" component={QualityControlDebug} />
@@ -115,6 +115,7 @@ function AuthenticatedRoutes() {
         <Route path="/Templates" component={DocumentTemplates} />
         <Route path="/logistique/fichedexpidition" component={FichedExpidition} />
         <Route path="/Rapportqualité" component={Rapportqualité} />
+        <Route path="/archive-rapportqualité" component={ArchiveRapportqualité} />
         <Route path="/Archivagedescontroles" component={Archivagedescontroles} />
         <Route path="/Archivagedesfacture" component={Archivagedesfacture} />
         <Route path="/DocumentArchive" component={DocumentArchive} />
@@ -137,11 +138,15 @@ function AuthenticatedRoutes() {
 }
 
 export default function App() {
+  const { isRTL } = useLanguage();
+
   return (
-    <AuthProvider>
-      <PublicRoutes />
-      <Toaster />
-      <SonnerToaster />
-    </AuthProvider>
+    <div dir={isRTL ? 'rtl' : 'ltr'} className={isRTL ? 'rtl' : 'ltr'}>
+      <AuthProvider>
+        <PublicRoutes />
+        <Toaster />
+        <SonnerToaster />
+      </AuthProvider>
+    </div>
   );
 }

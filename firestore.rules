@@ -295,11 +295,6 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // Quality Control collections
-    match /quality_control_lots/{lotId} {
-      allow read, write: if isAuthenticated();
-    }
-
     // Validation function for quality control lot data
     function isValidQualityControlLot() {
       let data = request.resource.data;
@@ -311,18 +306,25 @@ service cloud.firestore {
         && data.formData.campaign is string
         && data.formData.palettes is list
         && data.status is string
-        && (data.status in ['draft', 'completed', 'submitted', 'chief_approved', 'chief_rejected'])
+        && (data.status in ['draft', 'completed', 'submitted', 'chief_approved', 'chief_rejected', 'error'])
         && data.phase is string
         && (data.phase in ['controller', 'chief'])
         && data.createdAt != null
         && data.updatedAt != null;
     }
 
-    // Quality Control Lots collection with validation
+    // Quality Control Lots collection with validation and filtering
     match /quality_control_lots/{lotId} {
+      // Allow reading all lots for authenticated users (filtering happens in client)
       allow read: if isAuthenticated();
+      
+      // Allow creating new lots (they start as draft)
       allow create: if isAuthenticated() && isValidQualityControlLot();
+      
+      // Allow updating lots (including marking as completed)
       allow update: if isAuthenticated() && isValidQualityControlLot();
+      
+      // Allow deleting any lot if authenticated
       allow delete: if isAuthenticated();
     }
 

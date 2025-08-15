@@ -11,9 +11,10 @@ import { AlertCircle, Loader2, Save, CheckCircle, Clock, ArrowLeft, ArrowRight, 
 import { addAvocadoTracking, getFarms } from "@/lib/firebaseService";
 import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 export default function NewEntryPage() {
-
+  const { t } = useLanguage();
   const [farms, setFarms] = useState([]);
   const [error, setError] = useState('');
 
@@ -252,12 +253,12 @@ export default function NewEntryPage() {
   };
 
   const stepTitles = {
-    1: "Récolte",
+    1: t('newEntry.harvest'),
     2: "Transport",
-    3: "Tri & Qualité",
-    4: "Emballage",
-    5: "Stockage",
-    6: "Export",
+    3: t('newEntry.sorting'),
+    4: t('newEntry.packaging'),
+    5: t('newEntry.storage'),
+    6: t('newEntry.shipping'),
     7: "Livraison"
   };
 
@@ -270,8 +271,8 @@ export default function NewEntryPage() {
               <CardTitle className="flex items-center gap-3 text-green-800">
                 <span className="text-2xl">🌱</span>
                 <div>
-                  <div>Récolte (Ferme)</div>
-                  <div className="text-sm font-normal text-green-600">Informations sur la récolte des avocats</div>
+                  <div>{t('newEntry.harvestTitle')}</div>
+                  <div className="text-sm font-normal text-green-600">{t('newEntry.harvestSubtitle')}</div>
                 </div>
               </CardTitle>
             </CardHeader>
@@ -279,7 +280,7 @@ export default function NewEntryPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="harvestDate" className="flex items-center gap-2 font-semibold">
-                    📅 Date de récolte <span className="text-red-500">*</span>
+                    📅 {t('newEntry.harvestDate')} <span className="text-red-500">*</span>
                   </Label>
                   <Input
                     id="harvestDate"
@@ -293,14 +294,14 @@ export default function NewEntryPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="selectedFarm" className="flex items-center gap-2 font-semibold">
-                    🏡 Sélectionnez une ferme
+                    🏡 {t('newEntry.farm')}
                   </Label>
                   <Select
                     value={formData.selectedFarm || ""}
                     onValueChange={(value) => setFormData({ ...formData, selectedFarm: value })}
                   >
                     <SelectTrigger className="border-2 focus:border-green-500">
-                      <SelectValue placeholder="Choisir une ferme" />
+                      <SelectValue placeholder={t('newEntry.chooseFarm')} />
                     </SelectTrigger>
                     <SelectContent>
                       {farms.map((farm) => (
@@ -317,42 +318,42 @@ export default function NewEntryPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="farmerId" className="flex items-center gap-2 font-semibold">
-                    👨‍🌾 ID Agriculteur <span className="text-red-500">*</span>
+                    👨‍🌾 {t('newEntry.agronomistId')} <span className="text-red-500">*</span>
                   </Label>
                   <Input
                     id="farmerId"
                     value={formData.harvest?.farmerId || ""}
                     onChange={(e) => handleChange("harvest", "farmerId", e.target.value)}
                     className="border-2 focus:border-green-500 transition-colors"
-                    placeholder="Ex: AGR-2024-001"
+                    placeholder={t('newEntry.agronomistPlaceholder')}
                     required
                   />
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="lotNumber" className="flex items-center gap-2 font-semibold">
-                    🏷️ Numéro de lot <span className="text-red-500">*</span>
+                    🏷️ {t('newEntry.lotId')} <span className="text-red-500">*</span>
                   </Label>
                   <Input
                     id="lotNumber"
                     value={formData.harvest?.lotNumber || ""}
                     onChange={(e) => handleChange("harvest", "lotNumber", e.target.value)}
                     className="border-2 focus:border-green-500 transition-colors"
-                    placeholder="Ex: LOT-2024-001"
+                    placeholder={t('newEntry.lotPlaceholder')}
                     required
                   />
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="avocadoType" className="flex items-center gap-2 font-semibold">
-                    🥑 Type d'avocat
+                    🥑 {t('newEntry.avocadoType')}
                   </Label>
                   <Select
                     value={formData.harvest?.avocadoType || ""}
                     onValueChange={(value) => handleChange("harvest", "avocadoType", value)}
                   >
                     <SelectTrigger className="border-2 focus:border-green-500">
-                      <SelectValue placeholder="Sélectionner un type" />
+                      <SelectValue placeholder={t('newEntry.selectType')} />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="conventionnel">🌱 Conventionnel</SelectItem>
@@ -363,14 +364,14 @@ export default function NewEntryPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="variety" className="flex items-center gap-2 font-semibold">
-                    🌳 Variété d'avocat
+                    🌳 {t('newEntry.variety')}
                   </Label>
                   <Select
                     value={formData.harvest?.variety || "hass"}
                     onValueChange={(value) => handleChange("harvest", "variety", value)}
                   >
                     <SelectTrigger className="border-2 focus:border-green-500">
-                      <SelectValue placeholder="Sélectionner une variété" />
+                      <SelectValue placeholder={t('newEntry.selectVariety')} />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="hass">🥑 Hass</SelectItem>
@@ -512,8 +513,8 @@ export default function NewEntryPage() {
               <CardTitle className="flex items-center gap-3 text-purple-800">
                 <span className="text-2xl">🏭</span>
                 <div>
-                  <div>Tri et Qualité</div>
-                  <div className="text-sm font-normal text-purple-600">Contrôle qualité et classification</div>
+                  <div>{t('newEntry.sortingTitle')}</div>
+                  <div className="text-sm font-normal text-purple-600">{t('newEntry.sortingSubtitle')}</div>
                 </div>
               </CardTitle>
             </CardHeader>
@@ -534,14 +535,14 @@ export default function NewEntryPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="qualityGrade" className="flex items-center gap-2 font-semibold">
-                    ⭐ Grade de qualité <span className="text-red-500">*</span>
+                    ⭐ {t('newEntry.qualityGrade')} <span className="text-red-500">*</span>
                   </Label>
                   <Select
                     value={formData.sorting?.qualityGrade || "A"}
                     onValueChange={(value) => handleChange("sorting", "qualityGrade", value)}
                   >
                     <SelectTrigger className="border-2 focus:border-purple-500">
-                      <SelectValue placeholder="Sélectionner un grade" />
+                      <SelectValue placeholder={t('newEntry.selectGrade')} />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="A">🌟 Grade A - Premium</SelectItem>
@@ -566,14 +567,14 @@ export default function NewEntryPage() {
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="sortingNotes" className="flex items-center gap-2 font-semibold">
-                    📝 Notes de tri
+                    📝 {t('newEntry.observations')}
                   </Label>
                   <Textarea
                     id="sortingNotes"
                     value={formData.sorting?.notes || ""}
                     onChange={(e) => handleChange("sorting", "notes", e.target.value)}
                     className="border-2 focus:border-purple-500 transition-colors"
-                    placeholder="Observations sur la qualité, défauts constatés..."
+                    placeholder={t('newEntry.observationsPlaceholder')}
                     rows={3}
                   />
                 </div>
@@ -1058,7 +1059,7 @@ export default function NewEntryPage() {
               className="flex items-center gap-2"
             >
               <ArrowLeft className="h-4 w-4" />
-              Précédent
+              {t('newEntry.previous')}
             </Button>
 
             <div className="flex gap-3">
@@ -1074,7 +1075,7 @@ export default function NewEntryPage() {
                 ) : (
                   <Save className="h-4 w-4" />
                 )}
-                Sauvegarder brouillon
+                {t('newEntry.saveDraft')}
               </Button>
 
               {currentStep < 7 ? (
@@ -1084,7 +1085,7 @@ export default function NewEntryPage() {
                   disabled={!validateCurrentStep()}
                   className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-green-500 hover:from-blue-600 hover:to-green-600"
                 >
-                  Suivant
+                  {t('newEntry.next')}
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               ) : (
@@ -1098,7 +1099,7 @@ export default function NewEntryPage() {
                   ) : (
                     <CheckCircle className="h-4 w-4" />
                   )}
-                  {isSubmitting ? "Enregistrement..." : "Finaliser le suivi"}
+                  {isSubmitting ? t('newEntry.saving') : t('newEntry.finalize')}
                 </Button>
               )}
             </div>
@@ -1110,7 +1111,7 @@ export default function NewEntryPage() {
           <Alert className="mt-4 border-orange-200 bg-orange-50">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              Veuillez remplir tous les champs obligatoires (*) pour continuer.
+              {t('newEntry.validationMessage')}
             </AlertDescription>
           </Alert>
         )}

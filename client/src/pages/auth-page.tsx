@@ -1,4 +1,5 @@
 import { useAuth } from "@/components/auth-provider";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Redirect } from "wouter";
 import { useState } from "react";
 import { z } from "zod";
@@ -14,26 +15,27 @@ import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { toast } from "react-hot-toast";
 
-// Define schemas locally since we can't import from @shared/schema
-const loginSchema = z.object({
-  email: z.string().email("Email invalide"),
-  password: z.string().min(6, "Le mot de passe doit contenir au moins 6 caractères"),
-});
-
-const registerSchema = z.object({
-  email: z.string().email("Email invalide"),
-  password: z.string().min(6, "Le mot de passe doit contenir au moins 6 caractères"),
-  confirmPassword: z.string(),
-  name: z.string().min(2, "Le nom doit contenir au moins 2 caractères"),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Les mots de passe ne correspondent pas",
-  path: ["confirmPassword"],
-});
-
 export default function AuthPage() {
   const { user, login, loading } = useAuth();
+  const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<string>("login");
   const [registerLoading, setRegisterLoading] = useState(false);
+  
+  // Define schemas with translations
+  const loginSchema = z.object({
+    email: z.string().email(t('auth.invalidEmail')),
+    password: z.string().min(6, t('auth.passwordMinLength')),
+  });
+
+  const registerSchema = z.object({
+    email: z.string().email(t('auth.invalidEmail')),
+    password: z.string().min(6, t('auth.passwordMinLength')),
+    confirmPassword: z.string(),
+    name: z.string().min(2, t('auth.nameRequired')),
+  }).refine((data) => data.password === data.confirmPassword, {
+    message: t('auth.passwordsDoNotMatch'),
+    path: ["confirmPassword"],
+  });
   
   // If user is already logged in, redirect to dashboard
   if (user) {
@@ -87,11 +89,11 @@ export default function AuthPage() {
       console.error("Registration error:", error);
       // Handle specific Firebase error codes
       if (error.code === 'auth/email-already-in-use') {
-        toast.error("Cette adresse email est déjà utilisée");
+        toast.error(t('auth.emailAlreadyInUse'));
       } else if (error.code === 'auth/weak-password') {
-        toast.error("Le mot de passe est trop faible");
+        toast.error(t('auth.weakPassword'));
       } else {
-        toast.error("Erreur lors de l'inscription");
+        toast.error(t('auth.registrationError'));
       }
     } finally {
       setRegisterLoading(false);
@@ -104,17 +106,17 @@ export default function AuthPage() {
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="text-2xl text-center">
-              <span className="text-primary-600">Convo Bio</span> - Traçabilité d'Avocat
+              <span className="text-primary-600">Convo Bio</span> - {t('common.avocadoTraceability')}
             </CardTitle>
             <CardDescription className="text-center">
-              Accédez à votre espace de traçabilité d'avocats
+              {t('auth.accessYourSpace')}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-6">
-                <TabsTrigger value="login">Connexion</TabsTrigger>
-                <TabsTrigger value="register">Inscription</TabsTrigger>
+                <TabsTrigger value="login">{t('auth.login')}</TabsTrigger>
+                <TabsTrigger value="register">{t('auth.register')}</TabsTrigger>
               </TabsList>
               
               <TabsContent value="login">
@@ -125,9 +127,9 @@ export default function AuthPage() {
                       name="email"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Email</FormLabel>
+                          <FormLabel>{t('auth.email')}</FormLabel>
                           <FormControl>
-                            <Input placeholder="Entrez votre email" {...field} />
+                            <Input placeholder={t('auth.enterEmail')} {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -138,9 +140,9 @@ export default function AuthPage() {
                       name="password"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Mot de passe</FormLabel>
+                          <FormLabel>{t('auth.password')}</FormLabel>
                           <FormControl>
-                            <Input type="password" placeholder="Entrez votre mot de passe" {...field} />
+                            <Input type="password" placeholder={t('auth.enterPassword')} {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -150,10 +152,10 @@ export default function AuthPage() {
                       {loading ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Connexion en cours...
+                          {t('auth.signingIn')}
                         </>
                       ) : (
-                        "Se connecter"
+                        t('auth.signIn')
                       )}
                     </Button>
                   </form>
@@ -168,9 +170,9 @@ export default function AuthPage() {
                       name="email"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Email</FormLabel>
+                          <FormLabel>{t('auth.email')}</FormLabel>
                           <FormControl>
-                            <Input placeholder="Entrez votre email" {...field} />
+                            <Input placeholder={t('auth.enterEmail')} {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -181,9 +183,9 @@ export default function AuthPage() {
                       name="name"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Nom complet</FormLabel>
+                          <FormLabel>{t('auth.name')}</FormLabel>
                           <FormControl>
-                            <Input placeholder="Entrez votre nom complet" {...field} />
+                            <Input placeholder={t('auth.enterFullName')} {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -194,9 +196,9 @@ export default function AuthPage() {
                       name="password"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Mot de passe</FormLabel>
+                          <FormLabel>{t('auth.password')}</FormLabel>
                           <FormControl>
-                            <Input type="password" placeholder="Entrez votre mot de passe" {...field} />
+                            <Input type="password" placeholder={t('auth.enterPassword')} {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -207,9 +209,9 @@ export default function AuthPage() {
                       name="confirmPassword"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Confirmer le mot de passe</FormLabel>
+                          <FormLabel>{t('auth.confirmPassword')}</FormLabel>
                           <FormControl>
-                            <Input type="password" placeholder="Confirmez votre mot de passe" {...field} />
+                            <Input type="password" placeholder={t('auth.confirmYourPassword')} {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -219,10 +221,10 @@ export default function AuthPage() {
                       {registerLoading ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Inscription en cours...
+                          {t('auth.signingUp')}
                         </>
                       ) : (
-                        "S'inscrire"
+                        t('auth.signUp')
                       )}
                     </Button>
                   </form>

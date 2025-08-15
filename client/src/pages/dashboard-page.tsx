@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { StatsData, Farm, Lot, FilterState, AvocadoTracking } from "@shared/schema";
 import { useQuery } from "@tanstack/react-query";
 import { api, getFarms } from "@/lib/queryClient";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 // Constants
 const DEFAULT_FILTERS: FilterState = {
@@ -17,6 +18,7 @@ const DEFAULT_FILTERS: FilterState = {
 };
 
 export default function DashboardPage() {
+  const { t } = useLanguage();
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
 
   // Fetch farms data
@@ -97,7 +99,7 @@ export default function DashboardPage() {
           <Button 
             asChild 
             className="h-14 w-14 rounded-full shadow-lg bg-primary hover:bg-primary-600"
-            title="Scanner un code-barres"
+            title={t('dashboard.scanBarcode')}
           >
             <Link href="/scan">
               <QrCode className="h-6 w-6" />
@@ -106,7 +108,7 @@ export default function DashboardPage() {
           <Button 
             asChild 
             className="h-14 w-14 rounded-full shadow-lg bg-indigo-600 hover:bg-indigo-700"
-            title="Historique des expéditions"
+            title={t('dashboard.shipmentHistory')}
           >
             <Link href="/logistique/history">
               <History className="h-6 w-6" />
@@ -115,7 +117,7 @@ export default function DashboardPage() {
           <Button 
             asChild 
             className="h-14 w-14 rounded-full shadow-lg bg-primary hover:bg-primary-600"
-            title="Ajouter une nouvelle entrée"
+            title={t('dashboard.addNewEntry')}
           >
             <Link href="/new-entry">
               <Plus className="h-6 w-6" />

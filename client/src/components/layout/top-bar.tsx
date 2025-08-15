@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useAuth } from "@/components/auth-provider";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Menu, Bell, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
 import Sidebar from "./sidebar";
 import { useLocation } from "wouter";
 
@@ -12,21 +14,17 @@ interface TopBarProps {
 
 export default function TopBar({ title, subtitle }: TopBarProps) {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [language, setLanguage] = useState("FR");
   const [location, navigate] = useLocation();
 
   const toggleMobileMenu = () => {
     setMobileMenuOpen(!mobileMenuOpen);
   };
 
-  const toggleLanguage = () => {
-    setLanguage(language === "FR" ? "AR" : "FR");
-  };
-
   return (
     <>
-      <header className="bg-white shadow-sm flex justify-between items-center p-5 ">
+      <header className="bg-white shadow-sm flex justify-between items-center p-5">
         <div>
           <h1 className="text-2xl font-bold text-neutral-800">{title}</h1>
           {subtitle && <p className="text-neutral-500">{subtitle}</p>}
@@ -38,30 +36,12 @@ export default function TopBar({ title, subtitle }: TopBarProps) {
             size="icon"
             className="rounded-full"
             onClick={() => navigate('/communication-dashboard')}
+            title={t('common.notifications')}
           >
             <Bell className="h-5 w-5" />
           </Button>
 
-          <div className="flex items-center border rounded-md overflow-hidden">
-            <Button
-              className={`px-3 py-1 ${
-                language === "FR" ? "bg-primary-500 text-white" : "bg-white"
-              }`}
-              variant="ghost"
-              onClick={toggleLanguage}
-            >
-              FR
-            </Button>
-            <Button
-              className={`px-3 py-1 ${
-                language === "AR" ? "bg-primary-500 text-white" : "bg-white"
-              }`}
-              variant="ghost"
-              onClick={toggleLanguage}
-            >
-              AR
-            </Button>
-          </div>
+          <LanguageSwitcher />
 
           <Button
             variant="ghost"

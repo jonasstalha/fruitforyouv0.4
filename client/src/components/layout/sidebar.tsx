@@ -35,12 +35,14 @@ import {
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/use-auth";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 export default function Sidebar() {
   const [location] = useLocation();
   const [expandedSections, setExpandedSections] = useState<string[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const { user, hasAccess } = useAuth();
+  const { t, isRTL } = useLanguage();
 
   const isActive = (path: string) => {
     return location === path;
@@ -139,28 +141,27 @@ export default function Sidebar() {
   // All menu items with icons
   const menuItems = [
     {
-      title: "Tableau de Bord",
+      title: t('nav.dashboard'),
       icon: <Home className="h-5 w-5 mr-2" />,
       path: "/",
     },
-        {
-      title: "general communication dashboard",
+    {
+      title: t('dashboard.notifications'),
       icon: <Home className="h-5 w-5 mr-2" />,
       path: "/communication-dashboard",
     },
     {
-      title: "Nouvelle Entrée",
+      title: t('common.add') + " " + t('common.entry'),
       icon: <PlusSquare className="h-5 w-5 mr-2" />,
       path: "/new-entry",
     },
-    ,
     {
-      title: "commande clinet",
+      title: t('common.clientOrder'),
       icon: <PlusSquare className="h-5 w-5 mr-2" />,
       path: "/commandeclinet",
     },
     {
-      title: "Scanner Code",
+      title: t('common.scanCode'),
       icon: <QrCode className="h-5 w-5 mr-2" />,
       path: "/scan",
     },
@@ -181,28 +182,27 @@ export default function Sidebar() {
 
   const adminItems = [
     {
-      title: "Utilisateurs",
+      title: t('personnel.employees'),
       icon: <Users className="h-5 w-5 mr-2" />,
       path: "/users",
     },
     {
-      title: "Entrepôts",
+      title: t('common.warehouses'),
       icon: <Warehouse className="h-5 w-5 mr-2" />,
       path: "/warehouses",
     },
     {
-      title: "Gestion Lots",
+      title: t('common.manageLots'),
       icon: <PackageCheck className="h-5 w-5 mr-2" />,
       path: "/lots",
     },
     {
-      title: "Gérer Fermes",
+      title: t('common.manageFarms'),
       icon: <Tractor className="h-5 w-5 mr-2" />,
       path: "/farms",
     },
-    ,
     {
-      title: "gerer les commandes clinet",
+      title: t('common.manageClientOrders'),
       icon: <PlusSquare className="h-5 w-5 mr-2" />,
       path: "/gererlescommandesclinet",
     },
@@ -210,27 +210,22 @@ export default function Sidebar() {
 
   const logisticsItems = [
     {
-      title: "rapport generating",
+      title: t('logistics.reports'),
       icon: <Truck className="h-5 w-5 mr-2" />,
       path: "/rapport-generating",
     },
-    // {
-    //   title: "factures-templates ",
-    //   icon: <Package className="h-5 w-5 mr-2" />,
-    //   path: "/factures-templates",
-    // },
     {
-      title: "Inventaire",
+      title: t('logistics.inventory'),
       icon: <ClipboardList className="h-5 w-5 mr-2" />,
       path: "/inventory",
     }, 
-     {
-      title: "Fiche d Expidition",
+    {
+      title: t('logistics.expeditionSheet'),
       icon: <ClipboardList className="h-5 w-5 mr-2" />,
       path: "/logistique/fichedexpidition",
     },
     {
-      title: "Archifage",
+      title: t('common.archive'),
       icon: <ClipboardList className="h-5 w-5 mr-2" />,
       path: "https://archifage.fruitsforyou.ma",
       isExternal: true,
@@ -239,102 +234,78 @@ export default function Sidebar() {
 
   const quality = [
     {
-      title: "Contrôle Qualité",
+      title: t('quality.title'),
       icon: <ShieldCheck className="h-5 w-5 mr-2" />,
       path: "/qualitycontrol",
     },
-    ,
-        {
-      title: "Rapport qualité",
+    {
+      title: t('quality.reports'),
       icon: <FileBarChart className="h-5 w-5 mr-2" />,
       path: "/Rapportqualité",
     },
-        {
-      title: "Archivage des controles",
+    {
+      title: t('quality.archive'),
       icon: <ArchiveRestore className="h-5 w-5 mr-2" />,
       path: "/Archivagedescontroles",
     },
-
   ];
+
   const ReceptionItems = [
     {
-      title: "Réception",
+      title: t('reception.title'),
       icon: <ClipboardList className="h-5 w-5 mr-2" />,
       path: "/reception",
     },
-        {
-      title: "new entry ",
+    {
+      title: t('common.add') + " " + t('common.entry'),
       icon: <ClipboardList className="h-5 w-5 mr-2" />,
       path: "/new",
     },
   ];
+
   const personnelItems = [
     {
-      title: "Gestion Personnel",
+      title: t('personnel.title'),
       icon: <UserCog className="h-5 w-5 mr-2" />,
       path: "/personnelmanagement",
     },
     {
-      title: "Horaires",
+      title: t('personnel.schedule'),
       icon: <Calendar className="h-5 w-5 mr-2" />,
       path: "/schedules",
     },
   ];
+
   const production = [
     {
-      title: "calcule de consomation ",
+      title: t('production.consumption'),
       icon: <Calculator className="h-5 w-5 mr-2" />,
       path: "/calculedeconsomation",
     },
     {
-      title: "invtory tracking ",
+      title: t('production.tracking'),
       icon: <History className="h-5 w-5 mr-2" />,
       path: "/historiquedeconsomation",
     },
-        {
-      title: "suivi de production",
+    {
+      title: t('production.title'),
       icon: <History className="h-5 w-5 mr-2" />,
       path: "/suivi-production",
     },
   ];
-   const Comptabilité = [
+
+  const Comptabilité = [
     {
-      title: "Templates",
+      title: t('accounting.templates'),
       icon: <LayoutTemplate className="h-5 w-5 mr-2" />,
       path: "/Templates",
     },
     {
-      title: "Archivage des facture  ",
+      title: t('accounting.invoiceArchive'),
       icon: <ArchiveRestore className="h-5 w-5 mr-2" />,
       path: "https://archifage.fruitsforyou.ma",
       isExternal: true,
     },
-
-  ];
-       const mantenance = [
-    {
-      title: "dossiere de maintenance",
-      icon: <Construction  className="h-5 w-5 mr-2" />,
-      path: "/dossieredemaintenance",
-    },
-     {
-      title: "historique de maintenance",
-      icon: <History className="h-5 w-5 mr-2" />,
-      path: "/historiquedemaintenance",
-    },
-    ,
-     {
-      title: "analyse vibratoire",
-      icon: <Plus  className="h-5 w-5 mr-2" />,
-      path: "/automatisationdemaintenance",
-    },
-         {
-      title: "pieces de rechange maintenance",
-      icon: <Plus  className="h-5 w-5 mr-2" />,
-      path: "/piecesderechangemaintenance",
-    },
-
-
   ];
 
   return (
@@ -364,23 +335,21 @@ export default function Sidebar() {
           <div className="p-4 bg-neutral-900 border-b border-neutral-700">
             <div className="text-sm text-green-400 font-medium">{user.email}</div>
             <div className="text-xs text-neutral-500 capitalize">
-              Rôle: {user.role === 'comptabilite' ? 'Comptabilité' : user.role === 'maintenance' ? 'Maintenance' : user.role}
+              {t('common.role')}: {user.role === 'comptabilite' ? t('nav.accounting') : user.role}
             </div>
           </div>
         )}
 
         {/* Navigation */}
         <nav className="p-2 flex-grow overflow-y-auto">
-          {renderSection("Menu Principal", menuItems, "menu")}
-          {/* {renderSection("Traçabilité", traceabilityItems, "traceability")} */}
-          {renderSection("Administration", adminItems, "admin")}
-          {renderSection("Logistique", logisticsItems, "logistics")}
-          {renderSection("Qualité", quality, "quality")}
-          {renderSection("Réception", ReceptionItems, "reception")}
-          {renderSection("Production", production, "production")}
-          {renderSection("Personnel", personnelItems, "personnel")}
-          {renderSection("Comptabilité", Comptabilité, "Comptabilité")}
-          {renderSection("Maintenance", mantenance, "maintenance")}          
+          {renderSection(t('nav.menu'), menuItems, "menu")}
+          {renderSection(t('nav.admin'), adminItems, "admin")}
+          {renderSection(t('nav.logistics'), logisticsItems, "logistics")}
+          {renderSection(t('nav.quality'), quality, "quality")}
+          {renderSection(t('nav.reception'), ReceptionItems, "reception")}
+          {renderSection(t('nav.production'), production, "production")}
+          {renderSection(t('nav.personnel'), personnelItems, "personnel")}
+          {renderSection(t('nav.accounting'), Comptabilité, "Comptabilité")}
         </nav>
 
         {/* Bottom Section with Version and Info */}

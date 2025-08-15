@@ -2,7 +2,7 @@ import React from 'react';
 
 const RapportGenerating: React.FC = () => {
     const handleRedirect = () => {
-        window.open('https://rapporffy.online/', '_blank');
+        window.open('https://springgreen-parrot-975992.hostingersite.com/', '_blank');
     };
 
     return (

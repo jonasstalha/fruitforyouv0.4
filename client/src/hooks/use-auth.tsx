@@ -8,7 +8,7 @@ import {
 import { auth } from "@/lib/firebase";
 import { toast } from "sonner";
 
-export type UserRole = 'admin' | 'quality' | 'logistics' | 'reception' | 'production' | 'personnel' | 'comptabilite' | 'maintenance';
+export type UserRole = 'admin' | 'quality' | 'logistics' | 'reception' | 'production' | 'personnel' | 'comptabilite';
 
 interface CustomUser extends User {
   role?: UserRole;
@@ -24,14 +24,13 @@ interface AuthContextType {
 
 // Role permissions mapping
 const rolePermissions: Record<UserRole, string[]> = {
-  admin: ['menu', 'admin', 'logistics', 'quality', 'reception', 'production', 'personnel', 'Comptabilité', 'maintenance'],
+  admin: ['menu', 'admin', 'logistics', 'quality', 'reception', 'production', 'personnel', 'Comptabilité'],
   quality: ['menu', 'quality'],
   logistics: ['menu', 'logistics'],
   reception: ['menu', 'reception'],
   production: ['menu', 'production'],
   personnel: ['menu', 'personnel'],
   comptabilite: ['menu', 'Comptabilité'],
-  maintenance: ['menu', 'maintenance'],
 };
 
 // Demo role mapping based on email
@@ -86,7 +85,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         "production@example.com": { email: "production@example.com", role: "production" },
         "personnel@example.com": { email: "personnel@example.com", role: "personnel" },
         "comptabilite@example.com": { email: "comptabilite@example.com", role: "comptabilite" },
-        "maintenance@example.com": { email: "maintenance@example.com", role: "maintenance" },
       };
 
       // Check if it's a demo user

@@ -130,7 +130,7 @@ export interface QualityRapport {
   calibres: (string | number)[];
   images: Record<string | number, string[]>; // URLs organized by calibre
   testResults: Record<string | number, any>;
-  status: 'draft' | 'completed' | 'submitted' | 'chief_approved' | 'chief_rejected';
+  status: 'uncompleted' | 'draft' | 'completed' | 'submitted' | 'chief_approved' | 'chief_rejected' | 'archived';
   createdAt: string;
   updatedAt: string;
   submittedAt?: string;
@@ -353,6 +353,107 @@ export const testQualityControlPathUpload = async (file: File, lotId: string, ca
 };
 
 // Upload image to Firebase Storage
+// Helper function for exponential backoff delay
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Helper function to compress image if it's too large
+const compressImageIfNeeded = async (file: File, maxSizeMB: number = 2): Promise<File> => {
+  const maxSizeBytes = maxSizeMB * 1024 * 1024;
+  
+  if (file.size <= maxSizeBytes) {
+    return file; // File is already small enough
+  }
+  
+  console.log(`Compressing image ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
+  
+  return new Promise((resolve) => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d')!;
+    const img = new Image();
+    
+    img.onload = () => {
+      // Calculate new dimensions maintaining aspect ratio
+      const MAX_WIDTH = 1920;
+      const MAX_HEIGHT = 1080;
+      
+      let { width, height } = img;
+      
+      if (width > height) {
+        if (width > MAX_WIDTH) {
+          height = (height * MAX_WIDTH) / width;
+          width = MAX_WIDTH;
+        }
+      } else {
+        if (height > MAX_HEIGHT) {
+          width = (width * MAX_HEIGHT) / height;
+          height = MAX_HEIGHT;
+        }
+      }
+      
+      canvas.width = width;
+      canvas.height = height;
+      
+      // Draw and compress
+      ctx.drawImage(img, 0, 0, width, height);
+      
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            const compressedFile = new File([blob], file.name, {
+              type: 'image/jpeg',
+              lastModified: Date.now(),
+            });
+            
+            console.log(`Compressed ${file.name}: ${(file.size / 1024 / 1024).toFixed(2)}MB → ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`);
+            resolve(compressedFile);
+          } else {
+            resolve(file); // Fallback to original if compression fails
+          }
+        },
+        'image/jpeg',
+        0.8 // Quality setting
+      );
+    };
+    
+    img.onerror = () => resolve(file); // Fallback to original if loading fails
+    img.src = URL.createObjectURL(file);
+  });
+};
+
+// Helper function to retry with exponential backoff
+const retryWithBackoff = async <T>(
+  operation: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelay: number = 1000
+): Promise<T> => {
+  let lastError: Error;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error as Error;
+      
+      // Don't retry on certain types of errors
+      if (lastError.message.includes('storage/unauthorized') ||
+          lastError.message.includes('storage/invalid-format') ||
+          lastError.message.includes('storage/object-not-found')) {
+        throw lastError;
+      }
+      
+      if (attempt === maxRetries) {
+        break;
+      }
+      
+      const delayMs = baseDelay * Math.pow(2, attempt);
+      console.warn(`Upload attempt ${attempt + 1} failed, retrying in ${delayMs}ms...`);
+      await delay(delayMs);
+    }
+  }
+  
+  throw lastError!;
+};
+
 export const uploadQualityControlImage = async (
   file: File, 
   lotId: string, 
@@ -361,6 +462,9 @@ export const uploadQualityControlImage = async (
 ): Promise<string> => {
   try {
     console.log(`Starting upload for ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
+    
+    // Compress image if it's too large
+    const processedFile = await compressImageIfNeeded(file);
     
     // Ensure user is authenticated
     const isAuthenticated = await waitForAuth();
@@ -380,7 +484,7 @@ export const uploadQualityControlImage = async (
     }
 
     const timestamp = Date.now();
-    const fileName = `${file.name}_${timestamp}`;
+    const fileName = `${processedFile.name}_${timestamp}`;
     
     // Clean calibre value for file path (replace N/A with NA to avoid path issues)
     const cleanCalibre = calibre ? calibre.replace(/[^a-zA-Z0-9]/g, '') : 'unknown';
@@ -398,14 +502,17 @@ export const uploadQualityControlImage = async (
     console.log(`Upload path: ${storagePath}`);
     
     const storageRef = ref(storage, storagePath);
-    console.log('Storage reference created, starting upload...');
+    console.log('Storage reference created, starting upload with retry logic...');
     
-    try {
-      console.log('Starting direct upload using uploadBytes...');
+    // Wrap the upload operation with retry logic
+    const uploadOperation = async () => {
+      console.log('Starting upload attempt...');
       console.log('File details:', {
-        name: file.name,
-        size: `${(file.size / 1024 / 1024).toFixed(2)}MB`,
-        type: file.type
+        originalName: file.name,
+        originalSize: `${(file.size / 1024 / 1024).toFixed(2)}MB`,
+        processedName: processedFile.name,
+        processedSize: `${(processedFile.size / 1024 / 1024).toFixed(2)}MB`,
+        type: processedFile.type
       });
       console.log('Storage path:', storagePath);
       console.log('User auth info:', {
@@ -414,8 +521,17 @@ export const uploadQualityControlImage = async (
         emailVerified: auth.currentUser?.emailVerified
       });
       
-      // Use uploadBytes instead of uploadBytesResumable to avoid hanging issues
-      const snapshot = await uploadBytes(storageRef, file);
+      // Use uploadBytes with a timeout wrapper
+      const uploadWithTimeout = async (timeoutMs: number = 30000) => {
+        return Promise.race([
+          uploadBytes(storageRef, processedFile),
+          new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('Upload timeout')), timeoutMs)
+          )
+        ]);
+      };
+      
+      const snapshot = await uploadWithTimeout();
       console.log('✅ Upload completed successfully!');
       console.log('Upload snapshot metadata:', {
         bucket: snapshot.metadata.bucket,
@@ -425,58 +541,34 @@ export const uploadQualityControlImage = async (
         timeCreated: snapshot.metadata.timeCreated
       });
       
-      console.log('Getting download URL...');
-      const downloadURL = await getDownloadURL(snapshot.ref);
-      console.log('✅ Download URL obtained successfully:', downloadURL);
-      
-      // Verify the file exists by trying to get its metadata
-      console.log('Verifying file exists in Firebase Storage...');
-      try {
-        const { getMetadata } = await import('firebase/storage');
-        const metadata = await getMetadata(snapshot.ref);
-        console.log('✅ File verified in storage:', {
-          name: metadata.name,
-          bucket: metadata.bucket,
-          fullPath: metadata.fullPath,
-          size: metadata.size,
-          updated: metadata.updated
-        });
-      } catch (metadataError) {
-        console.warn('Could not verify file metadata:', metadataError);
-        // Not critical, continue anyway
-      }
-      
-      return downloadURL;
-    } catch (uploadError) {
-      console.error('❌ Upload failed with error:', uploadError);
-      
-      // Enhanced error analysis
-      if (uploadError instanceof Error) {
-        console.error('Error details:', {
-          name: uploadError.name,
-          message: uploadError.message,
-          stack: uploadError.stack
-        });
-        
-        // Check for specific Firebase errors
-        if (uploadError.message.includes('storage/unauthorized')) {
-          console.error('🚫 AUTHORIZATION ERROR: User does not have permission to upload to this path');
-          console.error('Check Firebase Storage rules and user permissions');
-        } else if (uploadError.message.includes('storage/canceled')) {
-          console.error('🚫 UPLOAD CANCELED: Upload was canceled');
-        } else if (uploadError.message.includes('storage/unknown')) {
-          console.error('🚫 UNKNOWN ERROR: Unknown Firebase Storage error');
-        } else if (uploadError.message.includes('storage/invalid-format')) {
-          console.error('🚫 INVALID FORMAT: File format not allowed');
-        } else if (uploadError.message.includes('storage/object-not-found')) {
-          console.error('🚫 PATH ERROR: Upload path not found or invalid');
-        } else if (uploadError.message.includes('network')) {
-          console.error('🚫 NETWORK ERROR: Network connection issue');
-        }
-      }
-      
-      throw new Error(`Upload failed: ${(uploadError as Error).message}`);
+      return snapshot;
+    };
+    
+    // Execute upload with retry logic
+    const snapshot = await retryWithBackoff(uploadOperation, 3, 2000);
+    
+    console.log('Getting download URL...');
+    const downloadURL = await getDownloadURL(snapshot.ref);
+    console.log('✅ Download URL obtained successfully:', downloadURL);
+    
+    // Verify the file exists by trying to get its metadata
+    console.log('Verifying file exists in Firebase Storage...');
+    try {
+      const { getMetadata } = await import('firebase/storage');
+      const metadata = await getMetadata(snapshot.ref);
+      console.log('✅ File verified in storage:', {
+        name: metadata.name,
+        bucket: metadata.bucket,
+        fullPath: metadata.fullPath,
+        size: metadata.size,
+        updated: metadata.updated
+      });
+    } catch (metadataError) {
+      console.warn('Could not verify file metadata:', metadataError);
+      // Not critical, continue anyway
     }
+    
+    return downloadURL;
   } catch (error) {
     console.error('Error uploading image:', error);
     console.error('Error details:', {
@@ -487,30 +579,109 @@ export const uploadQualityControlImage = async (
       imageType,
       calibre
     });
+    
+    // Enhanced error analysis
+    if (error instanceof Error) {
+      console.error('Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
+      
+      // Check for specific Firebase errors
+      if (error.message.includes('storage/unauthorized')) {
+        console.error('🚫 AUTHORIZATION ERROR: User does not have permission to upload to this path');
+        console.error('Check Firebase Storage rules and user permissions');
+      } else if (error.message.includes('storage/canceled')) {
+        console.error('🚫 UPLOAD CANCELED: Upload was canceled');
+      } else if (error.message.includes('storage/unknown')) {
+        console.error('🚫 UNKNOWN ERROR: Unknown Firebase Storage error');
+      } else if (error.message.includes('storage/invalid-format')) {
+        console.error('🚫 INVALID FORMAT: File format not allowed');
+      } else if (error.message.includes('storage/object-not-found')) {
+        console.error('🚫 PATH ERROR: Upload path not found or invalid');
+      } else if (error.message.includes('network') || error.message.includes('retry-limit-exceeded')) {
+        console.error('🚫 NETWORK ERROR: Network connection issue or retry limit exceeded');
+      } else if (error.message.includes('Upload timeout')) {
+        console.error('🚫 TIMEOUT ERROR: Upload took too long to complete');
+      }
+    }
+    
     throw error;
   }
 };
 
-// Upload multiple images for a calibre
+// Upload multiple images for a calibre with improved error handling
 export const uploadCalibreImages = async (
   files: File[], 
   lotId: string, 
-  calibre: string
-): Promise<string[]> => {
+  calibre: string,
+  onProgress?: (progress: { completed: number; total: number; errors: Array<{ file: string; error: string }> }) => void
+): Promise<{ urls: string[]; errors: Array<{ file: string; error: string }> }> => {
   try {
     console.log(`Starting upload of ${files.length} images for calibre ${calibre} in lot ${lotId}`);
     
-    const uploadPromises = files.map((file, index) => {
-      console.log(`Creating upload promise for image ${index + 1}/${files.length}: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
-      return uploadQualityControlImage(file, lotId, 'calibre', calibre);
-    });
+    const results: string[] = [];
+    const errors: Array<{ file: string; error: string }> = [];
+    let completed = 0;
     
-    console.log('Waiting for all uploads to complete...');
-    const urls = await Promise.all(uploadPromises);
-    console.log(`Successfully uploaded ${urls.length} images. URLs:`, urls);
-    return urls;
+    // Process uploads with controlled concurrency to avoid overwhelming the server
+    const concurrency = 3; // Max 3 simultaneous uploads
+    const chunks = [];
+    
+    for (let i = 0; i < files.length; i += concurrency) {
+      chunks.push(files.slice(i, i + concurrency));
+    }
+    
+    for (const chunk of chunks) {
+      const chunkPromises = chunk.map(async (file, index) => {
+        try {
+          console.log(`Uploading image ${completed + index + 1}/${files.length}: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
+          const url = await uploadQualityControlImage(file, lotId, 'calibre', calibre);
+          console.log(`✅ Successfully uploaded ${file.name}`);
+          return { success: true as const, url, file: file.name };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          console.error(`❌ Failed to upload ${file.name}:`, errorMessage);
+          return { success: false as const, error: errorMessage, file: file.name };
+        }
+      });
+      
+      const chunkResults = await Promise.allSettled(chunkPromises);
+      
+      chunkResults.forEach((result) => {
+        if (result.status === 'fulfilled') {
+          if (result.value.success) {
+            results.push(result.value.url);
+          } else {
+            errors.push({ file: result.value.file, error: result.value.error });
+          }
+        } else {
+          errors.push({ file: 'unknown', error: result.reason?.message || 'Promise rejected' });
+        }
+        completed++;
+        
+        // Report progress
+        if (onProgress) {
+          onProgress({ completed, total: files.length, errors });
+        }
+      });
+      
+      // Add a small delay between chunks to avoid rate limiting
+      if (chunks.indexOf(chunk) < chunks.length - 1) {
+        await delay(500);
+      }
+    }
+    
+    console.log(`Upload batch completed: ${results.length} successful, ${errors.length} failed`);
+    
+    if (errors.length > 0) {
+      console.warn('Some uploads failed:', errors);
+    }
+    
+    return { urls: results, errors };
   } catch (error) {
-    console.error('Error uploading calibre images:', error);
+    console.error('Error in batch upload:', error);
     throw error;
   }
 };
@@ -646,10 +817,26 @@ export const getQualityControlLot = async (lotId: string): Promise<QualityContro
 // Get all Quality Control Lots
 export const getQualityControlLots = async (phase?: 'controller' | 'chief'): Promise<QualityControlLot[]> => {
   try {
+    // Check localStorage first to see if recently hidden
+    const hiddenTimestamp = localStorage.getItem('qualityControlHidden');
+    const clearedTimestamp = localStorage.getItem('qualityControlCleared');
+    if (hiddenTimestamp || clearedTimestamp) {
+      const hiddenTime = hiddenTimestamp ? new Date(hiddenTimestamp) : new Date(clearedTimestamp || '');
+      const now = new Date();
+      const timeDiff = now.getTime() - hiddenTime.getTime();
+      
+      // If hidden less than 10 minutes ago, don't load any lots
+      if (timeDiff < 10 * 60 * 1000) {
+        console.log('Quality control data was recently hidden, returning empty array');
+        return [];
+      }
+    }
+    
     let q;
     
     if (phase) {
       // Use separate queries to avoid composite index requirement
+      // We can't use != with orderBy on a different field, so we'll filter after retrieval
       q = query(
         collection(db, QUALITY_CONTROL_COLLECTION),
         where('phase', '==', phase),
@@ -667,6 +854,12 @@ export const getQualityControlLots = async (phase?: 'controller' | 'chief'): Pro
     
     querySnapshot.forEach((doc) => {
       const data = doc.data();
+      
+      // Filter out hidden documents after retrieval
+      if (data.hidden === true) {
+        return; // Skip hidden documents
+      }
+      
       lots.push({
         id: doc.id,
         lotNumber: data.lotNumber,
@@ -1380,6 +1573,71 @@ export const getQualityRapportById = async (rapportId: string): Promise<QualityR
   }
 };
 
+// Archive Quality Rapport Lot
+export const archiveQualityRapportLot = async (lotId: string): Promise<void> => {
+  try {
+    const isAuth = await waitForAuth();
+    if (!isAuth) {
+      throw new Error('User not authenticated');
+    }
+
+    await updateQualityRapport(lotId, {
+      status: 'archived',
+      archivedAt: new Date().toISOString()
+    });
+
+    console.log(`Quality rapport lot ${lotId} archived successfully`);
+  } catch (error) {
+    console.error('Error archiving quality rapport lot:', error);
+    throw error;
+  }
+};
+
+// Get Archived Quality Rapports
+export const getArchivedQualityRapports = async (): Promise<QualityRapport[]> => {
+  try {
+    const isAuth = await waitForAuth();
+    if (!isAuth) {
+      throw new Error('User not authenticated');
+    }
+
+    const q = query(
+      collection(db, RAPPORT_COLLECTION), 
+      where('status', '==', 'archived'),
+      orderBy('archivedAt', 'desc')
+    );
+    const querySnapshot = await getDocs(q);
+    
+    const archivedRapports: QualityRapport[] = [];
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      archivedRapports.push({
+        id: doc.id,
+        lotNumber: data.lotNumber,
+        date: data.date,
+        controller: data.controller,
+        palletNumber: data.palletNumber,
+        calibres: data.calibres || [],
+        images: data.images || {},
+        testResults: data.testResults || {},
+        status: data.status,
+        createdAt: timestampToISOString(data.createdAt),
+        updatedAt: timestampToISOString(data.updatedAt),
+        submittedAt: data.submittedAt ? timestampToISOString(data.submittedAt) : undefined,
+        archivedAt: data.archivedAt ? timestampToISOString(data.archivedAt) : undefined,
+        pdfUrl: data.pdfUrl,
+        chiefComments: data.chiefComments,
+        chiefApprovalDate: data.chiefApprovalDate ? timestampToISOString(data.chiefApprovalDate) : undefined
+      });
+    });
+
+    return archivedRapports;
+  } catch (error) {
+    console.error('Error getting archived quality rapports:', error);
+    throw error;
+  }
+};
+
 // Export the service object
 export const qualityControlService = {
   // Authentication Functions
@@ -1407,5 +1665,7 @@ export const qualityControlService = {
   saveQualityRapport,
   updateQualityRapport,
   getQualityRapports,
-  getQualityRapportById
+  getQualityRapportById,
+  archiveQualityRapportLot,
+  getArchivedQualityRapports
 };

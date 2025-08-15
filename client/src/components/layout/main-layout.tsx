@@ -5,12 +5,15 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import Sidebar from "./sidebar";
 import { useLocation } from "wouter";
+import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface MainLayoutProps {
   children: React.ReactNode;
 }
 
 export default function MainLayout({ children }: MainLayoutProps) {
+  const { t } = useLanguage();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [location, navigate] = useLocation();
 
@@ -22,44 +25,44 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const getPageTitle = () => {
     switch (location) {
       case "/":
-        return "Dashboard";
+        return t('dashboard.title');
       case "/new-entry":
-        return "New Product Entry";
+        return t('common.newProductEntry');
       case "/scan":
-        return "Scan Products";
+        return t('common.scanProducts');
       case "/farms":
-        return "Farms";
+        return t('common.farms');
       case "/users":
-        return "Users";
+        return t('common.users');
       case "/map":
-        return "Map";
+        return t('common.map');
       case "/warehouses":
-        return "Warehouses";
+        return t('common.warehouses');
       case "/lots":
-        return "Lots";
+        return t('common.lots');
       case "/reports":
-        return "Reports";
+        return t('common.reports');
       case "/statistics":
-        return "Statistics";
+        return t('common.statistics');
       default:
-        return "Dashboard";
+        return t('dashboard.title');
     }
   };
 
   const getPageSubtitle = () => {
     switch (location) {
       case "/new-entry":
-        return "Add a new product to your inventory";
+        return t('common.newProductEntrySubtitle');
       case "/scan":
-        return "Scan barcodes or enter manually";
+        return t('common.scanProductsSubtitle');
       case "/warehouses":
-        return "Manage your warehouses";
+        return t('common.warehousesSubtitle');
       case "/lots":
-        return "Manage your lots";
+        return t('common.lotsSubtitle');
       case "/reports":
-        return "View and download reports";
+        return t('common.reportsSubtitle');
       case "/statistics":
-        return "View detailed statistics and analytics";
+        return t('common.statisticsSubtitle');
       default:
         return "";
     }
@@ -102,6 +105,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
               <Button variant="ghost" size="icon" onClick={() => navigate('/communication-dashboard')}>
                 <Bell className="h-5 w-5" />
               </Button>
+              <LanguageSwitcher />
               <Button variant="ghost" size="icon" onClick={logout}>
                 <User className="h-5 w-5" />
               </Button>
